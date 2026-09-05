@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "preset": "Oxford_210D_SmoothDrape_V2",
+  "intent": "减少 50 mm 三角网格上的高频碎褶，保留车罩版型验证所需的低拉伸特性",
+  "units": {
+    "length": "mm",
+    "blender_unit": "m"
+  },
+  "mesh_edge_target_mm": 50.0,
+  "simulation": {
+    "quality_steps": 20,
+    "time_scale": 1.0,
+    "mass_per_vertex": 0.09,
+    "air_damping": 3.0
+  },
+  "stiffness": {
+    "tension": 48.0,
+    "compression": 28.0,
+    "shear": 26.0,
+    "bending": 8.5,
+    "bending_model": "ANGULAR"
+  },
+  "damping": {
+    "tension": 10.0,
+    "compression": 12.0,
+    "shear": 10.0,
+    "bending": 6.0
+  },
+  "sewing": {
+    "enabled": true,
+    "max_force": 6.0
+  },
+  "object_collision": {
+    "enabled": true,
+    "quality": 8,
+    "distance_mm": 5.0,
+    "friction": 6.0
+  },
+  "self_collision": {
+    "enabled": true,
+    "distance_mm": 4.0,
+    "friction": 5.0
+  },
+  "pin": {
+    "group": "PIN_ROOF",
+    "stiffness": 0.2,
+    "initialization_only": true
+  },
+  "display": {
+    "shade_smooth": true
+  }
+}

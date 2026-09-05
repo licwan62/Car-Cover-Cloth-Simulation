@@ -1,0 +1,462 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<svg
+    xmlns="http://www.w3.org/2000/svg"
+    xmlns:xlink="http://www.w3.org/1999/xlink"
+
+    version="1.1"
+
+    width="10000mm"
+    height="10000mm"
+
+    viewBox="0 0 10000 10000"
+>
+
+    <!-- ================================================
+         BACKGROUND
+         ================================================ -->
+
+    <rect
+        id="BACKGROUND"
+
+        x="0"
+        y="0"
+
+        width="10000"
+        height="10000"
+
+        fill="#ffffff"
+    />
+
+
+    <!-- ================================================
+         DEBUG: MARGIN / BOUNDARY GUIDES
+         ================================================ -->
+
+    <g
+        id="DEBUG_GUIDES"
+
+        fill="none"
+        stroke="#cccccc"
+        stroke-width="1"
+        stroke-dasharray="8,4"
+    >
+
+        <!-- Left margin boundary -->
+
+        <line
+            x1="250.000"
+            y1="0"
+            x2="250.000"
+            y2="10000"
+        />
+
+        <!-- Right margin boundary -->
+
+        <line
+            x1="9750.000"
+            y1="0"
+            x2="9750.000"
+            y2="10000"
+        />
+
+        <!-- Top margin boundary -->
+
+        <line
+            x1="0"
+            y1="250.000"
+            x2="10000"
+            y2="250.000"
+        />
+
+        <!-- Bottom margin boundary -->
+
+        <line
+            x1="0"
+            y1="9750.000"
+            x2="10000"
+            y2="9750.000"
+        />
+
+    </g>
+
+
+    <!-- ================================================
+         DEBUG: VIEW BOUNDING BOXES
+         ================================================ -->
+
+    <g
+        id="DEBUG_VIEW_BOXES"
+
+        fill="none"
+        stroke="#ff0000"
+        stroke-width="2"
+    >
+
+        <!-- LEFT -->
+
+        <rect
+            x="250.000"
+            y="250.000"
+            width="5027.000"
+            height="1401.489"
+        />
+
+        <text
+            x="260.000"
+            y="300.000"
+            fill="#ff0000"
+            stroke="none"
+            font-size="60"
+            font-family="sans-serif"
+            font-weight="bold"
+        >LEFT</text>
+
+
+        <!-- FRONT -->
+
+        <rect
+            x="7577.558"
+            y="250.000"
+            width="2172.442"
+            height="1401.489"
+        />
+
+        <text
+            x="7587.558"
+            y="300.000"
+            fill="#ff0000"
+            stroke="none"
+            font-size="60"
+            font-family="sans-serif"
+            font-weight="bold"
+        >FRONT</text>
+
+
+        <!-- TOP -->
+
+        <rect
+            x="250.000"
+            y="2051.489"
+            width="5027.000"
+            height="2172.442"
+        />
+
+        <text
+            x="260.000"
+            y="2101.489"
+            fill="#ff0000"
+            stroke="none"
+            font-size="60"
+            font-family="sans-serif"
+            font-weight="bold"
+        >TOP</text>
+
+    </g>
+
+
+    <!-- ================================================
+         LEFT
+         ================================================ -->
+
+    <image
+        id="LEFT_VIEW_IMAGE"
+
+        href="Dodge Challenger SRT DEMON_LEFT.png"
+        xlink:href="Dodge Challenger SRT DEMON_LEFT.png"
+
+        x="250.000"
+        y="250.000"
+
+        width="5027.000"
+        height="1401.489"
+
+        preserveAspectRatio="none"
+    />
+
+
+    <!-- ================================================
+         FRONT
+
+         X:
+         7577.558
+
+         WIDTH:
+         2172.442
+
+         RIGHT:
+         9750.000
+
+         RIGHT MARGIN:
+         250.000
+         ================================================ -->
+
+    <image
+        id="FRONT_VIEW_IMAGE"
+
+        href="Dodge Challenger SRT DEMON_FRONT.png"
+        xlink:href="Dodge Challenger SRT DEMON_FRONT.png"
+
+        x="7577.558"
+        y="250.000"
+
+        width="2172.442"
+        height="1401.489"
+
+        preserveAspectRatio="none"
+    />
+
+
+    <!-- ================================================
+         TOP
+         ================================================ -->
+
+    <image
+        id="TOP_VIEW_IMAGE"
+
+        href="Dodge Challenger SRT DEMON_TOP.png"
+        xlink:href="Dodge Challenger SRT DEMON_TOP.png"
+
+        x="250.000"
+        y="2051.489"
+
+        width="5027.000"
+        height="2172.442"
+
+        preserveAspectRatio="none"
+    />
+
+
+    <!-- ================================================
+         DIMENSIONS
+         ================================================ -->
+
+    <g
+        id="DIMENSIONS"
+
+        fill="none"
+        stroke="#2563eb"
+        stroke-width="1.5"
+
+        font-family="sans-serif"
+        font-size="40"
+    >
+
+        <!-- ============================================
+             LEFT: Length (horizontal)
+             ============================================ -->
+
+        <line
+            x1="250.000"
+            y1="1711.489"
+            x2="5277.000"
+            y2="1711.489"
+        />
+
+        <line
+            x1="250.000"
+            y1="1696.489"
+            x2="250.000"
+            y2="1726.489"
+        />
+
+        <line
+            x1="5277.000"
+            y1="1696.489"
+            x2="5277.000"
+            y2="1726.489"
+        />
+
+        <text
+            x="2763.500"
+            y="1691.489"
+            text-anchor="middle"
+            stroke="none"
+            fill="#2563eb"
+        >L = 5027 mm</text>
+
+
+        <!-- ============================================
+             LEFT: Height (vertical)
+             ============================================ -->
+
+        <line
+            x1="190.000"
+            y1="250.000"
+            x2="190.000"
+            y2="1651.489"
+        />
+
+        <line
+            x1="175.000"
+            y1="250.000"
+            x2="205.000"
+            y2="250.000"
+        />
+
+        <line
+            x1="175.000"
+            y1="1651.489"
+            x2="205.000"
+            y2="1651.489"
+        />
+
+        <text
+            x="165.000"
+            y="950.745"
+            text-anchor="end"
+            stroke="none"
+            fill="#2563eb"
+
+            transform="rotate(-90,
+                165.000,
+                950.745)"
+        >H = 1401 mm</text>
+
+
+        <!-- ============================================
+             FRONT: Width (horizontal)
+             ============================================ -->
+
+        <line
+            x1="7577.558"
+            y1="1711.489"
+            x2="9750.000"
+            y2="1711.489"
+        />
+
+        <line
+            x1="7577.558"
+            y1="1696.489"
+            x2="7577.558"
+            y2="1726.489"
+        />
+
+        <line
+            x1="9750.000"
+            y1="1696.489"
+            x2="9750.000"
+            y2="1726.489"
+        />
+
+        <text
+            x="8663.779"
+            y="1691.489"
+            text-anchor="middle"
+            stroke="none"
+            fill="#2563eb"
+        >W = 2172 mm</text>
+
+
+        <!-- ============================================
+             FRONT: Height (vertical)
+             ============================================ -->
+
+        <line
+            x1="9810.000"
+            y1="250.000"
+            x2="9810.000"
+            y2="1651.489"
+        />
+
+        <line
+            x1="9795.000"
+            y1="250.000"
+            x2="9825.000"
+            y2="250.000"
+        />
+
+        <line
+            x1="9795.000"
+            y1="1651.489"
+            x2="9825.000"
+            y2="1651.489"
+        />
+
+        <text
+            x="9785.000"
+            y="950.745"
+            text-anchor="end"
+            stroke="none"
+            fill="#2563eb"
+
+            transform="rotate(-90,
+                9785.000,
+                950.745)"
+        >H = 1401 mm</text>
+
+
+        <!-- ============================================
+             TOP: Length (horizontal)
+             ============================================ -->
+
+        <line
+            x1="250.000"
+            y1="4283.932"
+            x2="5277.000"
+            y2="4283.932"
+        />
+
+        <line
+            x1="250.000"
+            y1="4268.932"
+            x2="250.000"
+            y2="4298.932"
+        />
+
+        <line
+            x1="5277.000"
+            y1="4268.932"
+            x2="5277.000"
+            y2="4298.932"
+        />
+
+        <text
+            x="2763.500"
+            y="4263.932"
+            text-anchor="middle"
+            stroke="none"
+            fill="#2563eb"
+        >L = 5027 mm</text>
+
+
+        <!-- ============================================
+             TOP: Width (vertical)
+             ============================================ -->
+
+        <line
+            x1="5337.000"
+            y1="2051.489"
+            x2="5337.000"
+            y2="4223.932"
+        />
+
+        <line
+            x1="5322.000"
+            y1="2051.489"
+            x2="5352.000"
+            y2="2051.489"
+        />
+
+        <line
+            x1="5322.000"
+            y1="4223.932"
+            x2="5352.000"
+            y2="4223.932"
+        />
+
+        <text
+            x="5312.000"
+            y="3137.711"
+            text-anchor="end"
+            stroke="none"
+            fill="#2563eb"
+
+            transform="rotate(-90,
+                5312.000,
+                3137.711)"
+        >W = 2172 mm</text>
+
+    </g>
+
+</svg>

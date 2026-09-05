@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "units": {
+    "length": "mm",
+    "blender_unit": "m"
+  },
+  "cloth_mesh": {
+    "target_edge_mm": 50.0,
+    "corner_angle_deg": 20.0,
+    "boundary_clearance_factor": 0.28,
+    "planar_tolerance_mm": 2.0,
+    "cdt_epsilon": 1e-7
+  },
+  "boundary_repair": {
+    "weld_distance_mm": 2.0,
+    "bridge_gap_mm": 20.0,
+    "degenerate_edge_mm": 0.05,
+    "max_iterations": 1000
+  },
+  "sewing": {
+    "naming": "S<id>_<panel>[_A|_B]",
+    "length_difference_warning_ratio": 0.1,
+    "length_difference_reject_ratio": 0.15,
+    "preferred_initial_distance_mm": [30.0, 100.0],
+    "maximum_initial_distance_mm": 300.0,
+    "delete_existing_loose_edges": true,
+    "clean_vertex_groups": true,
+    "minimum_segment_length_mm": 20.0,
+    "allow_legacy_pairs": true,
+    "legacy_pairs": [
+      ["SEAM_TOP_LEFT", "SEAM_LEFT_TOP"],
+      ["SEAM_TOP_RIGHT", "SEAM_RIGHT_TOP"]
+    ]
+  },
+  "collision_proxy": {
+    "preset": "CarCover_FastCollisionShell_V5",
+    "collection_name": "CC_COLLISION_PROXY",
+    "name_suffix": " Collision",
+    "voxel_size_mm": 20.0,
+    "use_voxel_remesh": false,
+    "remove_disconnected_components": false,
+    "target_faces": [8000, 24000],
+    "target_face_count": 18000,
+    "max_final_face_count": 24000,
+    "planar_dissolve": true,
+    "planar_angle_deg": 3.0,
+    "smooth_method": "LAPLACIAN",
+    "smooth_iterations": 0,
+    "smooth_factor": 0.12,
+    "smooth_volume_preserve": true,
+    "preserve_source_bounds": true,
+    "max_bounds_error_mm": 1.0,
+    "thin_overhang_support": {
+      "enabled": true,
+      "max_thickness_mm": 350.0,
+      "min_horizontal_span_mm": 250.0,
+      "min_height_ratio": 0.45,
+      "support_drop_mm": 350.0,
+      "max_length_ratio": 0.22,
+      "min_width_ratio": 0.25,
+      "min_end_ratio": 0.55,
+      "min_aspect_ratio": 2.0
+    },
+    "lower_body_inset": {
+      "enabled": false,
+      "start_height_ratio": 0.55,
+      "full_height_ratio": 0.2,
+      "distance_mm": 150.0
+    },
+    "thickness_mm": 7.0,
+    "friction": 10.0,
+    "use_culling": true,
+    "use_normal": true
+  },
+  "stages": [
+    {
+      "name": "sewing",
+      "gravity": false,
+      "car_collision": false,
+      "self_collision": false,
+      "pin": true
+    },
+    {
+      "name": "drop",
+      "gravity": true,
+      "car_collision": true,
+      "self_collision": false,
+      "pin": true
+    },
+    {
+      "name": "self_collision",
+      "gravity": true,
+      "car_collision": true,
+      "self_collision": true,
+      "pin": true
+    },
+    {
+      "name": "fit",
+      "gravity": true,
+      "car_collision": true,
+      "self_collision": true,
+      "pin": false
+    }
+  ]
+}

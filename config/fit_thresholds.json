@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "calibration_required": true,
+  "result_classes": ["PASS", "MARGINAL", "FAIL"],
+  "thresholds": {
+    "max_stretch": {
+      "pass_max_ratio": 0.03,
+      "marginal_max_ratio": null
+    },
+    "p95_stretch": null,
+    "hem_clearance_front_mm": null,
+    "hem_clearance_rear_mm": null,
+    "hem_clearance_left_mm": null,
+    "hem_clearance_right_mm": null,
+    "seam_strain": null,
+    "collision_penetration_mm": null,
+    "pin_displacement_mm": null,
+    "cover_center_offset_mm": null,
+    "front_coverage": null,
+    "rear_coverage": null,
+    "left_coverage": null,
+    "right_coverage": null
+  },
+  "notes": "除 max_stretch PASS 条件外，其余阈值必须通过真实车罩测试校准后填写。阈值不完整时不得自动输出最终 PASS/FAIL。"
+}

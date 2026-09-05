@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*.blend1
+*.blend2
+blender/blendcache_Lab/*
+*.bphys
+
+
+# 运行产物默认不入库；README 和已有基准样例除外。
+output/simulation/*
+output/debug/*
+!output/simulation/.gitkeep
+!output/debug/.gitkeep
