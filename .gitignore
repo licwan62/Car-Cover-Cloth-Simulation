@@ -11,3 +11,6 @@ output/simulation/*
 output/debug/*
 !output/simulation/.gitkeep
 !output/debug/.gitkeep
+
+# Blender binaries are kept locally.
+*.blend
