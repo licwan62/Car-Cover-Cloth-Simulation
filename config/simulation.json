@@ -72,6 +72,28 @@
     "use_culling": true,
     "use_normal": true
   },
+  "mirror_markers": {
+    "reference": "TESLA-MODELX.ai artboard 1",
+    "front_axis": "-Y",
+    "mirror": {
+      "distance_from_front_mm": 1600.0,
+      "height_from_bottom_mm": 1020.0,
+      "width_mm": 220.0,
+      "height_mm": 180.0,
+      "material_name": "CC Mirror Position Mark",
+      "color_rgba": [1.0, 0.12, 0.015, 1.0]
+    },
+    "charge_port": {
+      "side": "-LATERAL",
+      "distance_from_rear_mm": 340.0,
+      "height_from_bottom_mm": 820.0,
+      "width_mm": 180.0,
+      "height_mm": 160.0,
+      "material_name": "CC Charge Port Position Mark",
+      "color_rgba": [0.02, 0.35, 1.0, 1.0]
+    },
+    "search_depth_mm": 300.0
+  },
   "stages": [
     {
       "name": "sewing",

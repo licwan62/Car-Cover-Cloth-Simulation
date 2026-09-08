@@ -9,6 +9,8 @@
 | `generate_sewing.py` | Select seam paths and create Sewing Springs | Semantic ID pairing, A/B direction and legacy fallback integrated |
 | `setup_cloth.py` | Apply Oxford cloth settings | Config-driven SmoothDrape V2 preset |
 | `setup_cloth_standalone.py` | Apply the self-contained HemLevel 50F V26 preset | Fast staged Sewing, unpinned front/rear HEM leveling, delayed self-collision, collision-safe sliding, no force fields, seam-only post-Cloth Weld, and render-only display subdivision |
+| `setup_mirror_markers.py` | Add left/right mirror-position comparison marks | Config-driven, non-physical face-material marks based on TESLA-MODELX.ai artboard 1 |
+| `setup_mirror_markers_standalone.py` | Add the same mirror-position marks without project dependencies | Opens an interactive `MARKER_CONFIG` dialog before applying non-physical marks at the settled frame |
 | `generate_collision_proxy.py` | Generate a smooth vehicle Collision Proxy | Reads `config/simulation.json`; delegates geometry work to the matching standalone implementation |
 | `generate_collision_proxy_standalone.py` | Generate the same Collision Proxy without project dependencies | Embedded FastCollisionShell V5 settings; original evaluated topology, zero-or-one rear-wing support, optional voxel remesh, 18k-triangle collision budget, source-bounds correction, and Collision physics |
 | `generate_collision_shell_standalone.py` | Test a two-stage watertight collision-shell workflow | Creates a 35 mm inspection Outer Shell with adaptive thin-panel repair, extracts a 50 mm/6k-triangle Collision only from that shell, restores source bounds, and rejects disconnected or non-manifold output |
@@ -108,6 +110,19 @@ that creates the tail "black-hole" effect; increasing Sewing force would make
 it worse rather than correct it.
 
 Planned modules from `doc/AGENT.md` that do not yet have production implementations are intentionally not represented by empty Python files. Add them with tests as the pipeline grows: `import_pattern`, `validate_pattern`, `parse_seams`, `arrange_panels`, `setup_pin`, `run_simulation`, `analyze_fit`, and `export_report`.
+
+## Mirror-position comparison marks
+
+Artboard 1 of `illustrator/TESLA-MODELX.ai` places the mirror-pocket center
+1600 mm behind the front-bottom endpoint and 1020 mm above it. The left-side
+charge-port center is 340 mm from the rear-bottom endpoint and 820 mm above it.
+At the
+settled comparison frame, activate the Cloth mesh, optionally select its vehicle
+or Collision reference too, and run `setup_mirror_markers.py`. The script paints
+small left/right mirror marks orange-red and the left charge-port mark blue. It does not create a mirror-pocket
+mesh or affect Cloth, Collision, mass, sewing, or Fit geometry. If the vehicle
+front axis differs from the Model X scene's default -Y, change
+`mirror_markers.front_axis` in `config/simulation.json`.
 
 ## Standalone policy
 
