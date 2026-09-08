@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="10000mm" height="7070.7mm" viewBox="0 0 2834.65 2004.29">
+  <g id="PANEL">
+    <path id="PANEL_RIGHT" d="M1776.81,1286.43c22.68,0,43.63,8.14,56.18,13.25,46.44,18.91,168.33,99.32,229.16,113.31,58.02,13.34,181.38,6.83,236.26,29.92,38.2,16.07,89.78,50.69,89.78,113.84v211.56H446.46v-283.46c0-64.81,55.36-80.2,85.03-85.04,69.15-11.27,279.68-26.54,347.17-41.81,80.97-18.32,459-71.58,524.08-71.58,60.99,0,374.06,0,374.06,0Z" fill="none" stroke="#39b54a" stroke-linecap="square" stroke-linejoin="round" stroke-width="3"/>
+    <path id="PANEL_LEFT" d="M1776.81,657.49c22.68,0,43.63-8.14,56.18-13.25,46.44-18.91,168.33-99.32,229.16-113.31,58.02-13.34,181.38-6.83,236.26-29.92,38.2-16.07,89.78-50.69,89.78-113.84v-211.56H446.46v283.46c0,64.81,55.36,80.2,85.03,85.04,69.15,11.27,279.68,26.54,347.17,41.81,80.97,18.32,459,71.58,524.08,71.58,60.99,0,374.06,0,374.06,0Z" fill="none" stroke="#39b54a" stroke-linecap="square" stroke-linejoin="round" stroke-width="3"/>
+    <path id="PANEL_TOP" d="M2150.7,725.35c-133.29,0-283.46,34.02-283.46,34.02H232.99v425.2h1634.25s150.17,34.02,283.46,34.02h566.93v-493.23h-566.93Z" fill="none" stroke="#39b54a" stroke-linecap="square" stroke-linejoin="round" stroke-width="3"/>
+  </g>
+  <g id="HEM">
+    <line id="HEM_RIGHT" x1="2388.19" y1="1768.31" x2="446.46" y2="1768.31" fill="none" stroke="#39b54a" stroke-linecap="square" stroke-linejoin="round" stroke-width="3"/>
+    <line id="HEM_LEFT" x1="2388.19" y1="175.61" x2="446.46" y2="175.61" fill="none" stroke="#39b54a" stroke-linecap="square" stroke-linejoin="round" stroke-width="3"/>
+    <line id="HEM_TOP_FRONT" x1="2717.63" y1="1218.58" x2="2717.63" y2="725.35" fill="none" stroke="#39b54a" stroke-linecap="square" stroke-linejoin="round" stroke-width="3"/>
+    <line id="HEM_TOP_REAR" x1="232.99" y1="759.36" x2="232.99" y2="1184.56" fill="none" stroke="#39b54a" stroke-linecap="square" stroke-linejoin="round" stroke-width="3"/>
+  </g>
+  <g id="SEAM">
+    <path id="S001_RIGHT" d="M446.46,1768.31v-283.46c0-64.81,55.36-80.2,85.03-85.04,69.15-11.27,279.68-26.54,347.17-41.81,80.97-18.32,459-71.58,524.08-71.58,60.99,0,374.06,0,374.06,0,22.68,0,43.63,8.14,56.18,13.25,46.44,18.91,168.33,99.32,229.16,113.31,58.02,13.34,181.38,6.83,236.26,29.92,38.2,16.07,89.78,50.69,89.78,113.84v211.56" fill="none" stroke="#39b54a" stroke-linecap="square" stroke-linejoin="round" stroke-width="3"/>
+    <path id="S001_LEFT" d="M446.46,175.61v283.46c0,64.81,55.36,80.2,85.03,85.04,69.15,11.27,279.68,26.54,347.17,41.81,80.97,18.32,459,71.58,524.08,71.58,60.99,0,374.06,0,374.06,0,22.68,0,43.63-8.14,56.18-13.25,46.44-18.91,168.33-99.32,229.16-113.31,58.02-13.34,181.38-6.83,236.26-29.92,38.2-16.07,89.78-50.69,89.78-113.84v-211.56" fill="none" stroke="#39b54a" stroke-linecap="square" stroke-linejoin="round" stroke-width="3"/>
+    <path id="S002_TOP" d="M232.99,1184.56h1634.25s150.17,34.02,283.46,34.02h566.93" fill="none" stroke="#39b54a" stroke-linecap="square" stroke-linejoin="round" stroke-width="3"/>
+  </g>
+</svg>

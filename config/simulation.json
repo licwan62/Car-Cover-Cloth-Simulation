@@ -78,8 +78,8 @@
     "mirror": {
       "distance_from_front_mm": 1600.0,
       "height_from_bottom_mm": 1020.0,
-      "width_mm": 220.0,
-      "height_mm": 180.0,
+        "width_mm": 430.0,
+        "height_mm": 320.0,
       "material_name": "CC Mirror Position Mark",
       "color_rgba": [1.0, 0.12, 0.015, 1.0]
     },

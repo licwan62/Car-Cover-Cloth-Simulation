@@ -25,7 +25,6 @@ from mathutils.bvhtree import BVHTree
 # ============================================================
 
 PRESET_NAME = "CarCover_TwoStageOuterShell_TEST_V2"
-COLLECTION_NAME = "CC_COLLISION_SHELL_TEST"
 OUTER_SHELL_SUFFIX = " Outer Shell TEST"
 COLLISION_SUFFIX = " Shell Collision TEST"
 
@@ -58,11 +57,21 @@ COLLISION_SMOOTH_FACTOR = 0.12
 TARGET_TRIANGLES = 6000
 MAX_TRIANGLES = 8000
 
+# Voxel Remesh places its reconstructed surface around occupied voxel cells,
+# which can leave broad panels locally outside the source even after the AABB
+# is restored. Pull the remeshed surface inward before the final bounds restore;
+# the restore keeps the overall vehicle dimensions while retaining the local
+# anti-bulge correction.
+VOXEL_INWARD_COMPENSATION_FACTOR = 0.45
+
 PRESERVE_SOURCE_BOUNDS = True
 MAX_BOUNDS_ERROR_MM = 1.0
 KEEP_OUTER_SHELL = True
 
-COLLISION_THICKNESS_MM = 10.0
+# Cloth already keeps OBJECT_COLLISION_DISTANCE_MM away from the collider.
+# Keep the collider-side margin small so the proxy does not visibly inflate
+# the fitted cover beyond the source vehicle dimensions.
+COLLISION_THICKNESS_MM = 1.0
 COLLISION_FRICTION = 3.0
 COLLISION_USE_CULLING = False
 COLLISION_USE_NORMAL = True
@@ -89,6 +98,10 @@ def validate_parameters():
         )
     if TARGET_TRIANGLES < 100 or MAX_TRIANGLES < TARGET_TRIANGLES:
         raise ValueError("Triangle limits are invalid")
+    if not 0.0 <= VOXEL_INWARD_COMPENSATION_FACTOR <= 0.5:
+        raise ValueError(
+            "VOXEL_INWARD_COMPENSATION_FACTOR must be in [0, 0.5]"
+        )
     for name, iterations, factor in (
         (
             "outer shell",
@@ -156,10 +169,12 @@ def cleanup_stale_work_objects():
     return len(stale)
 
 
-def ensure_collection(scene):
-    collection = bpy.data.collections.get(COLLECTION_NAME)
+def ensure_collection(scene, collection_name):
+    """Return the scene collection named after the target source object."""
+
+    collection = bpy.data.collections.get(collection_name)
     if collection is None:
-        collection = bpy.data.collections.new(COLLECTION_NAME)
+        collection = bpy.data.collections.new(collection_name)
     scene_collections = {scene.collection}
     scene_collections.update(scene.collection.children_recursive)
     if collection not in scene_collections:
@@ -451,6 +466,30 @@ def apply_decimation(obj):
     return before, after
 
 
+def compensate_voxel_surface_expansion(obj, voxel_mm):
+    """Inset a remeshed surface to counter voxel-cell outward expansion."""
+
+    distance = (
+        voxel_mm * VOXEL_INWARD_COMPENSATION_FACTOR / 1000.0
+    )
+    if distance <= 0.0:
+        return 0.0
+
+    recalculate_normals(obj)
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(obj.data)
+        bm.normal_update()
+        for vertex in bm.verts:
+            if vertex.normal.length_squared > 1.0e-12:
+                vertex.co -= vertex.normal.normalized() * distance
+        bm.to_mesh(obj.data)
+    finally:
+        bm.free()
+    obj.data.update()
+    return distance * 1000.0
+
+
 def restore_reference_bounds(obj, reference_bounds):
     """Restore exact source AABB after remesh and volume-preserving smoothing."""
 
@@ -586,6 +625,7 @@ def build_stage_one_shell(obj, reference_bounds, protect_thin_surfaces):
     removed_islands, removed_island_faces = keep_largest_surface_component(
         obj
     )
+    compensate_voxel_surface_expansion(obj, OUTER_SHELL_VOXEL_MM)
     bounds_report = restore_reference_bounds(obj, reference_bounds)
     recalculate_normals(obj)
     mesh_report = inspect_watertight_mesh(obj, "Outer Shell")
@@ -681,6 +721,29 @@ def move_to_collection(obj, collection):
             user_collection.objects.unlink(obj)
 
 
+def link_sources_to_collection(sources, collection):
+    """Add source vehicle objects beside their generated shells."""
+
+    linked = 0
+    for source in sources:
+        if collection not in source.users_collection:
+            collection.objects.link(source)
+            linked += 1
+    return linked
+
+
+def configure_source_collisions(sources, collection):
+    """Give the original high-resolution vehicle the same collision surface."""
+
+    for source in sources:
+        configure_collision(source)
+        source["collision_shell_collection"] = collection.name
+        source["collision_source_high_resolution"] = True
+        source["collision_proxy_thickness_mm"] = COLLISION_THICKNESS_MM
+        source["collision_proxy_friction"] = COLLISION_FRICTION
+    return len(sources)
+
+
 def finalize_outer_shell(obj, name, collection, sources, report, bounds_report):
     replace_previous_generated(name, obj)
     obj.name = name
@@ -691,13 +754,18 @@ def finalize_outer_shell(obj, name, collection, sources, report, bounds_report):
         del obj[WORK_TAG]
     obj["collision_shell_preset"] = PRESET_NAME
     obj["collision_shell_sources"] = ", ".join(source.name for source in sources)
+    obj["collision_shell_collection"] = collection.name
     obj["collision_shell_stage"] = "OUTER_SHELL"
     obj["collision_shell_voxel_mm"] = OUTER_SHELL_VOXEL_MM
+    obj["collision_shell_inward_compensation_mm"] = (
+        OUTER_SHELL_VOXEL_MM * VOXEL_INWARD_COMPENSATION_FACTOR
+    )
     store_report(obj, report, bounds_report)
     move_to_collection(obj, collection)
     obj.display_type = "WIRE"
     obj.show_in_front = SHOW_IN_FRONT
     obj.hide_render = HIDE_FROM_RENDER
+    configure_collision(obj)
 
 
 def configure_collision(obj):
@@ -760,11 +828,15 @@ def finalize_collision(obj, name, collection, sources, report, bounds_report):
         del obj[WORK_TAG]
     obj["collision_proxy_preset"] = PRESET_NAME
     obj["collision_proxy_sources"] = ", ".join(source.name for source in sources)
+    obj["collision_shell_collection"] = collection.name
     obj["collision_shell_stage"] = "COLLISION_FROM_OUTER_SHELL"
     obj["collision_shell_outer_voxel_mm"] = OUTER_SHELL_VOXEL_MM
     obj["collision_shell_collision_voxel_mm"] = COLLISION_VOXEL_MM
     obj["collision_proxy_thickness_mm"] = COLLISION_THICKNESS_MM
     obj["collision_proxy_friction"] = COLLISION_FRICTION
+    obj["collision_shell_inward_compensation_mm"] = (
+        COLLISION_VOXEL_MM * VOXEL_INWARD_COMPENSATION_FACTOR
+    )
     store_report(obj, report, bounds_report)
     move_to_collection(obj, collection)
     obj.display_type = "WIRE"
@@ -813,7 +885,11 @@ def main():
     base_name = source_base_name(sources, original_active)
     outer_name = f"{base_name}{OUTER_SHELL_SUFFIX}"
     collision_name = f"{base_name}{COLLISION_SUFFIX}"
-    collection = ensure_collection(bpy.context.scene)
+    # Keep the generated shells beside the logical target, in a collection
+    # whose name matches the active source object (or the first valid source
+    # when no selected source is active). setup_cloth uses the collection stored
+    # on the generated Collision proxy as its explicit collision scope.
+    collection = ensure_collection(bpy.context.scene, base_name)
     work_objects = []
     outer_shell = None
     collision = None
@@ -823,6 +899,7 @@ def main():
     print(f"GENERATE TWO-STAGE COLLISION SHELL: {PRESET_NAME}")
     print("=" * 72)
     print(f"Sources ({len(sources)}): {', '.join(obj.name for obj in sources)}")
+    print(f"Target collection: {collection.name}")
     if stale_count:
         print(f"Removed {stale_count} stale work object(s)")
 
@@ -921,6 +998,7 @@ def main():
             keep_largest_surface_component(collision)
         )
         pre_decimate, post_decimate = apply_decimation(collision)
+        compensate_voxel_surface_expansion(collision, COLLISION_VOXEL_MM)
         collision_bounds_report = restore_reference_bounds(
             collision,
             source_bounds,
@@ -970,6 +1048,11 @@ def main():
             top_damage_before,
             top_damage_after,
         )
+        linked_source_count = link_sources_to_collection(sources, collection)
+        configured_source_count = configure_source_collisions(
+            sources,
+            collection,
+        )
 
         if not KEEP_OUTER_SHELL:
             remove_object_and_mesh(outer_shell)
@@ -1016,6 +1099,13 @@ def main():
         )
         print(f"Outer Shell: {outer_name if outer_shell else 'not kept'}")
         print(f"Collision: {collision.name}")
+        print(
+            f"Target sources in collection: {len(sources)} "
+            f"({linked_source_count} newly linked)"
+        )
+        print(
+            f"High-resolution source colliders: {configured_source_count}"
+        )
         print("Use only the Collision object when running Cloth.")
         print("=" * 72)
 

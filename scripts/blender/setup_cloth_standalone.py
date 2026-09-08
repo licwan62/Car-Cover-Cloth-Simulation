@@ -5,6 +5,9 @@ Usage in Blender:
 2. Paste this entire file into the Text Editor.
 3. Select one or more 50 mm cloth mesh objects in Object Mode.
 4. Clear any old Cloth bake, run Script, then simulate frames 1 through 50.
+5. If the front hem remains high, run again at the settled final frame (unbaked
+   playback). The script measures median front/rear world Z and adds bounded
+   front tension for the next replay. Repeat from Scene Start to verify the fit.
 
 This file deliberately has no project imports and reads no JSON, so saving it
 inside a .blend file is enough to reproduce the preset.
@@ -93,7 +96,8 @@ DISPLAY_SUBSURF_RENDER_LEVELS = 2
 
 # Front/rear fitting guide. V26 changes only the HEM rest shape in world Z and
 # leaves those vertices unpinned. It first applies equal tension, then adds a
-# late differential trim: more pull at the front and less at the rear. Collision
+# late differential trim: more pull at the front and less at the rear. Settled
+# frame reruns additionally measure the remaining height error. Collision
 # and low friction remain free to slide a caught hem over the vehicle.
 ENABLE_HEM_DRAG = True
 ENABLE_REAR_DRAG = False  # Legacy force-field implementation stays disabled.
@@ -145,7 +149,11 @@ HEM_DRAG_END = 40
 HEM_LEVEL_START = 31
 HEM_LEVEL_END = 44
 HEM_DRAG_SETTLE_END = 49
-HEM_EQUAL_HEIGHT_TOLERANCE_MM = 20.0  # V24 legacy function only.
+HEM_EQUAL_HEIGHT_TOLERANCE_MM = 20.0
+ENABLE_HEM_HEIGHT_FEEDBACK = True
+HEM_HEIGHT_FEEDBACK_GAIN = 0.5
+MAX_HEM_FRONT_EXTRA_MM = 250.0
+HEM_FEEDBACK_SHAPE_KEY_NAME = "CC_HEM_FRONT_HEIGHT_CORRECTION"
 
 # Names from V7/V8 are retained only so rerunning V9 can stop and hide the old
 # generated rear Wind fields rather than allowing both guides to act at once.
@@ -251,18 +259,50 @@ def selected_cloth_meshes():
 
 
 def resolve_collision_scope():
-    """Use Collision physics as the marker, scoped to the active scene."""
+    """Bind Cloth explicitly to the generated proxy collection when unique."""
 
     scene = bpy.context.scene
-    colliders = [
+    scene_colliders = [
         obj
         for obj in scene.objects
         if obj.type == "MESH"
         and any(modifier.type == "COLLISION" for modifier in obj.modifiers)
     ]
+    generated = [
+        obj for obj in scene_colliders
+        if obj.get(COLLISION_PROXY_TAG, False)
+    ]
+    colliders = generated or scene_colliders
+
+    collection = None
+    collection_names = {
+        str(obj.get("collision_shell_collection", ""))
+        for obj in colliders
+        if obj.get("collision_shell_collection", "")
+    }
+    if len(collection_names) == 1:
+        candidate = bpy.data.collections.get(next(iter(collection_names)))
+        if candidate is not None and all(
+            candidate.objects.get(obj.name) is obj for obj in colliders
+        ):
+            collection = candidate
+    elif len(colliders) == 1:
+        scene_collections = {scene.collection}
+        scene_collections.update(scene.collection.children_recursive)
+        memberships = [
+            item for item in colliders[0].users_collection
+            if item in scene_collections
+        ]
+        if len(memberships) == 1:
+            collection = memberships[0]
+
+    if collection is not None:
+        scope = (
+            f"collection '{collection.name}' Collision objects"
+        )
+        return collection, colliders, scope
+
     scope = f"current scene '{scene.name}' Collision objects"
-    # None tells Cloth not to require a specially named collection. Blender's
-    # dependency graph naturally limits the evaluated colliders to this scene.
     return None, colliders, scope
 
 
@@ -1578,6 +1618,7 @@ def disable_rear_drag(obj, modifier):
     shape_keys = getattr(obj.data, "shape_keys", None)
     if shape_keys is not None:
         target_names = {
+            HEM_FEEDBACK_SHAPE_KEY_NAME,
             REAR_DRAG_SHAPE_KEY_NAME,
             HEM_LEVEL_SHAPE_KEY_NAME,
             str(
@@ -2097,7 +2138,49 @@ def remove_v24_hem_grab_artifacts(obj):
     return removed_shape_keys, removed_modifiers
 
 
-def configure_hem_dynamic_drag(obj, modifier):
+def hem_front_extra_mm(previous_mm, difference_mm):
+    """Bounded correction with a dead band; release extra pull on overshoot."""
+    tolerance = HEM_EQUAL_HEIGHT_TOLERANCE_MM
+    error = max(0.0, difference_mm - tolerance) + min(
+        0.0, difference_mm + tolerance
+    )
+    return max(0.0, min(MAX_HEM_FRONT_EXTRA_MM,
+                        previous_mm + HEM_HEIGHT_FEEDBACK_GAIN * error))
+
+
+def measure_settled_hem_difference(obj):
+    """Read semantic groups on evaluated geometry, including downstream Weld.
+
+    Use median world Z so a single caught corner does not drive the whole hem.
+    Never map base vertex indices onto the welded/subdivided output.
+    """
+    scene = bpy.context.scene
+    if not ENABLE_HEM_HEIGHT_FEEDBACK or not ENABLE_HEM_DRAG:
+        return None
+    cloth = next((m for m in obj.modifiers if m.type == "CLOTH"), None)
+    if cloth is None or scene.frame_current < scene.frame_start + HEM_DRAG_SETTLE_END:
+        print(f"  [CC HEM] {obj.name}: run again on the settled final frame "
+              "to measure front/rear height; keeping previous correction")
+        return None
+    evaluated = obj.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    heights = []
+    for name in HEM_DRAG_GROUP_NAMES:
+        points = vertex_group_world_points(evaluated, name)
+        if not points:
+            print(f"  [CC HEM] {obj.name}: cannot measure {name}; keeping correction")
+            return None
+        values = sorted(point.z for point in points)
+        middle = len(values) // 2
+        heights.append((values[middle] + values[(len(values) - 1) // 2]) * 0.5)
+    difference = (heights[0] - heights[1]) * 1000.0
+    obj["cloth_hem_measured_difference_mm"] = difference
+    obj["cloth_hem_measurement_frame"] = scene.frame_current
+    print(f"  [CC HEM] {obj.name}: front/rear median Z="
+          f"{heights[0]:.4f}/{heights[1]:.4f} m, gap={difference:.1f} mm")
+    return difference
+
+
+def configure_hem_dynamic_drag(obj, modifier, measured_difference_mm=None):
     """Apply equal HEM tension, then a collision-safe front/rear level trim."""
 
     cleared_fields = clear_legacy_rear_pull_fields(obj)
@@ -2244,6 +2327,33 @@ def configure_hem_dynamic_drag(obj, modifier):
         f"(3.0-2.0*({level_progress}))"
     )
 
+    # Freeze measured feedback into a deterministic driver schedule. No live
+    # handler mutates the rest mesh while Cloth is evaluating or reading cache.
+    extra_mm = float(obj.get("cloth_hem_front_extra_mm", 0.0))
+    if not ENABLE_HEM_HEIGHT_FEEDBACK:
+        extra_mm = 0.0
+    elif measured_difference_mm is not None:
+        extra_mm = hem_front_extra_mm(extra_mm, measured_difference_mm)
+    extra_mm = max(0.0, min(MAX_HEM_FRONT_EXTRA_MM, extra_mm))
+    correction = key_blocks.get(HEM_FEEDBACK_SHAPE_KEY_NAME)
+    if correction is None:
+        correction = obj.shape_key_add(name=HEM_FEEDBACK_SHAPE_KEY_NAME, from_mix=False)
+    correction.driver_remove("value")
+    correction.relative_key = basis
+    correction.value = 0.0
+    for vertex_index in range(len(obj.data.vertices)):
+        correction.data[vertex_index].co = basis.data[vertex_index].co
+    for vertex_index, weight in source_weights_by_group[FRONT_DRAG_GROUP_NAME]:
+        point = obj.matrix_world @ basis.data[vertex_index].co
+        point.z -= extra_mm * weight / 1000.0
+        correction.data[vertex_index].co = inverse_world @ point
+    correction_driver = correction.driver_add("value").driver
+    correction_driver.type = "SCRIPTED"
+    correction_driver.expression = driver.expression
+    obj["cloth_hem_front_extra_mm"] = extra_mm
+    print(f"  [CC HEM] {obj.name}: additional front rest-tension={extra_mm:.1f} mm "
+          f"(limit {MAX_HEM_FRONT_EXTRA_MM:g} mm); replay from Scene Start")
+
     settings.use_dynamic_mesh = True
     obj["car_cover_hem_drag_schedule"] = True
     obj["cloth_hem_drag_groups"] = ",".join(HEM_DRAG_GROUP_NAMES)
@@ -2294,7 +2404,7 @@ def configure_hem_dynamic_drag(obj, modifier):
     )
 
 
-def apply_preset(obj):
+def apply_preset(obj, measured_difference_mm=None):
     """Apply the embedded preset to one mesh object."""
 
     proxy_reason = collision_proxy_reason(obj)
@@ -2443,7 +2553,9 @@ def apply_preset(obj):
         has_pin_reference,
     )
 
-    rear_drag_target, rear_drag_status = configure_hem_dynamic_drag(obj, modifier)
+    rear_drag_target, rear_drag_status = configure_hem_dynamic_drag(
+        obj, modifier, measured_difference_mm
+    )
 
     # Replace handlers left by V19 even when every generated field is disabled.
     ensure_force_stage_handler()
@@ -2482,6 +2594,9 @@ def main():
             "如果碰撞代理上已误加 Cloth，请先删除该 Cloth 修改器。"
         )
 
+    # Capture every selected object before setup resets the frame/cache of any.
+    hem_measurements = {obj.name: measure_settled_hem_difference(obj) for obj in objects}
+
     required_end = bpy.context.scene.frame_start + SIMULATION_END_OFFSET
     bpy.context.scene.frame_end = required_end
 
@@ -2510,7 +2625,7 @@ def main():
             expansion_status,
             rear_drag_target,
             rear_drag_status,
-        ) = apply_preset(obj)
+        ) = apply_preset(obj, hem_measurements[obj.name])
         if was_baked:
             baked_objects.append(obj.name)
 
