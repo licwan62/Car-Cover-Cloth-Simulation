@@ -268,14 +268,25 @@ def _candidate_mappers(svg_bounds, mesh_bounds):
                 yield mapper
 
 
-def _best_mapper(panel_paths, seam_paths, boundary_points):
+def _best_mapper(panel_paths, seam_paths, boundary_points, boundary_segments):
+    """Choose the SVG orientation using distance to the actual mesh boundary.
+
+    Measuring probes against boundary vertices produces a resolution-dependent
+    error: a point on the middle of a long boundary edge is reported as being
+    half an edge length away.  Measure against boundary segments instead so the
+    mapping error represents geometric misalignment rather than mesh density.
+    """
+
     svg_bounds = _bounds_2d(panel_paths.values())
     mesh_bounds = _bounds_2d([[point for point in boundary_points]])
     probes = [point for path in seam_paths.values() for point in path]
     best = None
     for mapper in _candidate_mappers(svg_bounds, mesh_bounds):
         error = sum(
-            min((mapper(point) - boundary).length for boundary in boundary_points)
+            min(
+                _distance_to_segment(mapper(point), start, end)
+                for start, end in boundary_segments
+            )
             for point in probes
         ) / len(probes)
         if best is None or error < best[0]:
@@ -450,6 +461,13 @@ def build_semantic_sewing(obj, filepath):
     boundary_edges, boundary_indices = _boundary_data(mesh)
     coordinates = {vertex.index: vertex.co.copy() for vertex in mesh.vertices}
     boundary_points = [Vector((coordinates[index].x, coordinates[index].y)) for index in boundary_indices]
+    boundary_segments = [
+        (
+            Vector((coordinates[start].x, coordinates[start].y)),
+            Vector((coordinates[end].x, coordinates[end].y)),
+        )
+        for start, end in boundary_edges
+    ]
     edge_lengths = sorted(
         (coordinates[start] - coordinates[end]).length for start, end in boundary_edges
     )
@@ -458,7 +476,9 @@ def build_semantic_sewing(obj, filepath):
 
     semantic_edges = dict(seams)
     semantic_edges.update(hems)
-    mapping_error, mapper = _best_mapper(panels, semantic_edges, boundary_points)
+    mapping_error, mapper = _best_mapper(
+        panels, semantic_edges, boundary_points, boundary_segments
+    )
     if mapping_error > tolerance * MAX_MAPPING_ERROR_FACTOR:
         raise RuntimeError(
             f"SVG→Mesh 平均映射误差 {mapping_error * 1000.0:.1f} mm 过大；"

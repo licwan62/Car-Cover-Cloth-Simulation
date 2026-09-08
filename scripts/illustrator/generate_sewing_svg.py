@@ -150,18 +150,52 @@ def split_panel(segments, top=False):
             raise ValueError("Side PANEL needs one unambiguous long horizontal HEM edge")
         i = candidates[0]
         return left_to_right(segments[i + 1:] + segments[:i]), [segments[i]]
-    ends = [i for i, (a, b, c) in enumerate(segments)
-            if c is None and abs(a[0] - b[0]) < EPS
-            and (abs(a[0] - low) < EPS or abs(a[0] - high) < EPS)]
-    if len(ends) != 2 or abs(segments[ends[0]][0][0] - segments[ends[1]][0][0]) < EPS:
+    end_indices = [i for i, (a, b, c) in enumerate(segments)
+                   if c is None and abs(a[0] - b[0]) < EPS
+                   and (abs(a[0] - low) < EPS or abs(a[0] - high) < EPS)]
+
+    # Illustrator may split one straight TOP end into several consecutive
+    # vertical path commands. Treat each cyclic run at one X extreme as a
+    # single HEM chain instead of requiring exactly one SVG segment per end.
+    end_set = set(end_indices)
+    end_runs = []
+    if end_set and len(end_set) < len(segments):
+        start = next(i for i in range(len(segments)) if i not in end_set)
+        current = []
+        for offset in range(1, len(segments) + 1):
+            index = (start + offset) % len(segments)
+            if index in end_set:
+                current.append(index)
+            elif current:
+                end_runs.append(current)
+                current = []
+        if current:
+            end_runs.append(current)
+
+    if (len(end_runs) != 2
+            or abs(segments[end_runs[0][0]][0][0]
+                   - segments[end_runs[1][0]][0][0]) < EPS):
         raise ValueError("TOP needs two vertical end HEM edges at opposite X extremes")
-    i, j = sorted(ends)
-    chains = [segments[i + 1:j], segments[j + 1:] + segments[:i]]
+
+    first, second = end_runs
+
+    def segments_between(run_a, run_b):
+        indices = []
+        index = (run_a[-1] + 1) % len(segments)
+        while index != run_b[0]:
+            indices.append(index)
+            index = (index + 1) % len(segments)
+        return [segments[index] for index in indices]
+
+    chains = [segments_between(first, second), segments_between(second, first)]
     if not all(chains):
         raise ValueError("TOP seam contours are empty")
     # In Illustrator coordinates, the upper TOP edge pairs with PANEL_LEFT.
     chains.sort(key=lambda chain: sum(a[1] + b[1] for a, b, _ in chain) / (2 * len(chain)))
-    hems = sorted(([segments[i]], [segments[j]]), key=lambda chain: chain[0][0][0])
+    hems = sorted(
+        ([segments[index] for index in run] for run in end_runs),
+        key=lambda chain: chain[0][0][0],
+    )
     return [left_to_right(chain) for chain in chains], hems
 
 

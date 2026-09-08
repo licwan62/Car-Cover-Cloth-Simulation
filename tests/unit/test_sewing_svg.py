@@ -58,6 +58,21 @@ class SewingSVGTests(unittest.TestCase):
                 svg.convert_file(source, output)
         self.assertEqual(source.read_bytes(), before)
 
+    def test_split_top_accepts_consecutive_vertical_end_segments(self):
+        source = ROOT / "scripts/illustrator/SVG/Dodge Challenger 495-125 (+12X2).svg"
+        root = ET.parse(source).getroot()
+        output = svg.convert_tree(root)
+        paths = {element.get("id"): element for element in output.iter()}
+        self.assertIn("HEM_TOP_FRONT", paths)
+        self.assertIn("HEM_TOP_REAR", paths)
+        segment_counts = [
+            sum(token.isalpha() and token.upper() != "M"
+                for token in svg.TOKEN.findall(element.get("d")))
+            for name, element in paths.items()
+            if name in {"HEM_TOP_FRONT", "HEM_TOP_REAR"}
+        ]
+        self.assertEqual(sorted(segment_counts), [1, 3])
+
     def test_smooth_curve_reflects_control_and_roundtrips(self):
         segments = svg.parse_path("M0 0 C1 0 2 1 3 1 s2 1 3 0 L0 0Z")
         self.assertEqual(segments[1], ((3., 1.), (6., 1.), ((4., 1.), (5., 2.))))

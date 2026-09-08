@@ -1,13 +1,13 @@
-"""Apply a self-contained 50-frame sew-and-hem-fit car-cover preset.
+"""Apply a self-contained 75-frame sew-and-natural-drape car-cover preset.
 
 Usage in Blender:
 1. Open the Scripting workspace and create a new Text block.
 2. Paste this entire file into the Text Editor.
 3. Select one or more 50 mm cloth mesh objects in Object Mode.
-4. Clear any old Cloth bake, run Script, then simulate frames 1 through 50.
-5. If the front hem remains high, run again at the settled final frame (unbaked
-   playback). The script measures median front/rear world Z and adds bounded
-   front tension for the next replay. Repeat from Scene Start to verify the fit.
+4. Clear any old Cloth bake, run Script, then simulate frames 1 through 75
+   (or Scene Start through Scene Start + 74).
+5. Start with non-intersecting panels. Self-collision is active from the start;
+   the hem settles freely without dynamic rest-shape correction.
 
 This file deliberately has no project imports and reads no JSON, so saving it
 inside a .blend file is enough to reproduce the preset.
@@ -18,59 +18,58 @@ from mathutils import Vector
 
 
 # ============================================================
-# EMBEDDED PRESET: Blender_Denim_HemLevel_50F_V26
+# EMBEDDED PRESET: CarCover_NaturalDrape_75F_V27
 # Assumptions:
 # - 1 Blender Unit = 1 metre
 # - Average cloth mesh edge length is approximately 50 mm
-# - No generated force fields or HEM Pin; two dynamic rest-shape keys first add
-#   equal tension, then pull HEM_FRONT while releasing HEM_REAR
+# - No generated force fields, HEM Pin, or dynamic hem rest-shape correction
 # ============================================================
 
-PRESET_NAME = "Blender_Denim_HemLevel_50F_V26"
-MATERIAL_PRESET_NAME = "Blender Default Denim"
+PRESET_NAME = "CarCover_NaturalDrape_75F_V27"
+MATERIAL_PRESET_NAME = "Car Cover Natural Drape (uncalibrated)"
 MESH_EDGE_TARGET_MM = 50.0
-SIMULATION_END_OFFSET = 49
+SIMULATION_END_OFFSET = 74
 
-QUALITY_STEPS = 8
+QUALITY_STEPS = 20
 TIME_SCALE = 1.0
 MASS_PER_VERTEX = 0.25
-AIR_DAMPING = 5.0
+AIR_DAMPING = 3.0
 
 TENSION_STIFFNESS = 60.0
 COMPRESSION_STIFFNESS = 50.0
 SHEAR_STIFFNESS = 50.0
-BENDING_STIFFNESS = 25.0
-BENDING_STIFFNESS_DURING_SEWING = 18.0
+BENDING_STIFFNESS = 8.0
+BENDING_STIFFNESS_DURING_SEWING = 8.0
 BENDING_RECOVERY_START = 7
 BENDING_RECOVERY_END = 17
 BENDING_MODEL = "ANGULAR"
 
-TENSION_DAMPING = 25.0
-COMPRESSION_DAMPING = 25.0
-SHEAR_DAMPING = 25.0
+TENSION_DAMPING = 10.0
+COMPRESSION_DAMPING = 10.0
+SHEAR_DAMPING = 10.0
 BENDING_DAMPING = 3.0
 
 ENABLE_SEWING = True
-SEWING_FORCE_START = 8.0
-MAX_SEWING_FORCE = 40.0
+SEWING_FORCE_START = 4.0
+MAX_SEWING_FORCE = 12.0
 SEWING_FORCE_SUSTAIN = 6.0
 SEWING_RAMP_START = 0
-SEWING_RAMP_END = 7
-SEWING_RELEASE_START = 11
-SEWING_RELEASE_END = 17
+SEWING_RAMP_END = 19
+SEWING_RELEASE_START = 24
+SEWING_RELEASE_END = 34
 SEWING_GRAVITY_FACTOR = 0.65
 GRAVITY_RAMP_START = 0
-GRAVITY_RAMP_END = 4
+GRAVITY_RAMP_END = 19
 
 ENABLE_OBJECT_COLLISION = True
-COLLISION_QUALITY = 5
+COLLISION_QUALITY = 8
 OBJECT_COLLISION_DISTANCE_MM = 10.0
 OBJECT_COLLISION_FRICTION = 0.2
 COLLIDER_SURFACE_FRICTION = 3.0
 COLLISION_PROXY_TAG = "car_cover_generated_collision_proxy"
 
 ENABLE_SELF_COLLISION = True
-SELF_COLLISION_START = 16
+SELF_COLLISION_START = 0
 SELF_COLLISION_DISTANCE_MM = 2.5
 SELF_COLLISION_FRICTION = 0.2
 
@@ -80,11 +79,25 @@ PIN_VERTEX_WEIGHT = 0.85
 ENABLE_ROOF_PIN_DURING_SIMULATION = True
 AUTO_CREATE_ROOF_PIN = True
 AUTO_ROOF_PIN_VERTEX_COUNT = 12
-ROOF_PIN_HOLD_END = 9
-ROOF_PIN_RELEASE_END = 15
+ROOF_PIN_HOLD_END = 19
+ROOF_PIN_RELEASE_END = 29
 
 SHADE_SMOOTH = True
 ENABLE_DISPLAY_SUBSURF = True
+
+# Procedural seam preview. Semantic groups created by
+# generate_sewing_standalone.py are combined into a point-domain mask read by
+# the material. The mask follows Cloth deformation and adds no solve geometry.
+ENABLE_SEAM_TEXTURE = True
+SEAM_MASK_ATTRIBUTE = "CC_SEAM_MASK"
+SEAM_MATERIAL_NAME = "CC Natural Drape Seam Material"
+FABRIC_COLOR = (0.035, 0.055, 0.085, 1.0)
+SEAM_COLOR = (0.004, 0.006, 0.009, 1.0)
+# Higher values make the seam band thinner. This value targets the preset's
+# approximately 50 mm mesh edges.
+SEAM_MASK_THRESHOLD = 0.72
+FABRIC_ROUGHNESS = 0.72
+
 # A post-Weld Catmull-Clark modifier must rebuild its topology whenever seam
 # vertices cross the Weld threshold. Keep it out of viewport playback so frame
 # 19 does not appear to freeze the timeline at frame 18. Render evaluation
@@ -94,17 +107,14 @@ DISPLAY_SUBSURF_IN_VIEWPORT = False
 DISPLAY_SUBSURF_LEVELS = 1
 DISPLAY_SUBSURF_RENDER_LEVELS = 2
 
-# Front/rear fitting guide. V26 changes only the HEM rest shape in world Z and
-# leaves those vertices unpinned. It first applies equal tension, then adds a
-# late differential trim: more pull at the front and less at the rear. Settled
-# frame reruns additionally measure the remaining height error. Collision
-# and low friction remain free to slide a caught hem over the vehicle.
-ENABLE_HEM_DRAG = True
+# Legacy front/rear fitting guide, disabled in V27 so the hem settles freely.
+# Keep its parameters and cleanup routines to deactivate existing V26 drivers.
+ENABLE_HEM_DRAG = False
 ENABLE_REAR_DRAG = False  # Legacy force-field implementation stays disabled.
 FRONT_DRAG_GROUP_NAME = "HEM_FRONT"
 REAR_DRAG_GROUP_NAME = "HEM_REAR"
 HEM_DRAG_GROUP_NAMES = (FRONT_DRAG_GROUP_NAME, REAR_DRAG_GROUP_NAME)
-# V16/V24 generated names are retained so V26 can remove their stale Pin,
+# V16/V24 generated names are retained so V27 can remove their stale Pin,
 # trajectory-key and force-field data when the script is rerun.
 REAR_DRAG_PIN_GROUP_NAME = "CC_REAR_DRAG_PIN"
 REAR_DRAG_WEIGHT_GROUP_NAME = "CC_REAR_DRAG_WEIGHT"
@@ -148,9 +158,9 @@ HEM_DRAG_START = 17
 HEM_DRAG_END = 40
 HEM_LEVEL_START = 31
 HEM_LEVEL_END = 44
-HEM_DRAG_SETTLE_END = 49
+HEM_DRAG_SETTLE_END = 74
 HEM_EQUAL_HEIGHT_TOLERANCE_MM = 20.0
-ENABLE_HEM_HEIGHT_FEEDBACK = True
+ENABLE_HEM_HEIGHT_FEEDBACK = False
 HEM_HEIGHT_FEEDBACK_GAIN = 0.5
 MAX_HEM_FRONT_EXTRA_MM = 250.0
 HEM_FEEDBACK_SHAPE_KEY_NAME = "CC_HEM_FRONT_HEIGHT_CORRECTION"
@@ -159,7 +169,7 @@ HEM_FEEDBACK_SHAPE_KEY_NAME = "CC_HEM_FRONT_HEIGHT_CORRECTION"
 # generated rear Wind fields rather than allowing both guides to act at once.
 LEGACY_REAR_PULL_OBJECT_PREFIX = "CC_REAR_PULL_"
 
-# V26 keeps the old TOP directional guide disabled. Cleanup paths make rerunning
+# V27 keeps the old TOP directional guide disabled. Cleanup paths make rerunning
 # the script deactivate stale fields already stored in the .blend file.
 # script disable old V7/V8
 # TOP Wind objects already stored in the .blend file.
@@ -176,7 +186,7 @@ TOP_DOWN_HOLD_END = 3
 TOP_DOWN_RELEASE_END = 5
 
 # Legacy staged expansion parameters are retained for deterministic cleanup and
-# easy comparison, but V26 keeps this entire expansion guide disabled.
+# easy comparison, but V27 keeps this entire expansion guide disabled.
 ENABLE_STAGED_EXPANSION = False
 REQUIRE_PIN_FOR_EXPANSION = True
 EXPANSION_CENTER_OBJECT_NAME = "COVER_AIR_CENTER"
@@ -225,7 +235,7 @@ ENABLE_POST_CLOTH_SEAM_WELD = True
 SEAM_WELD_MODIFIER_NAME = "CC Post-Cloth Seam Weld"
 SEAM_WELD_GROUP_NAME = "CC_SEAM_WELD"
 SEAM_WELD_DISTANCE_MM = 6.0
-SEAM_WELD_ENABLE_OFFSET = 18
+SEAM_WELD_ENABLE_OFFSET = 35
 ABORT_ON_SEWING_HUBS = True
 MAX_SEWING_CONNECTORS_PER_VERTEX = 2
 
@@ -259,50 +269,21 @@ def selected_cloth_meshes():
 
 
 def resolve_collision_scope():
-    """Bind Cloth explicitly to the generated proxy collection when unique."""
+    """Use every Collision mesh in the current scene.
+
+    Returning ``None`` as the collection is Blender's explicit all-scene
+    collision scope.  Keep the collider list for friction configuration and
+    diagnostics, but do not let generated-proxy tags narrow the solver scope.
+    """
 
     scene = bpy.context.scene
-    scene_colliders = [
+    colliders = [
         obj
         for obj in scene.objects
         if obj.type == "MESH"
         and any(modifier.type == "COLLISION" for modifier in obj.modifiers)
     ]
-    generated = [
-        obj for obj in scene_colliders
-        if obj.get(COLLISION_PROXY_TAG, False)
-    ]
-    colliders = generated or scene_colliders
-
-    collection = None
-    collection_names = {
-        str(obj.get("collision_shell_collection", ""))
-        for obj in colliders
-        if obj.get("collision_shell_collection", "")
-    }
-    if len(collection_names) == 1:
-        candidate = bpy.data.collections.get(next(iter(collection_names)))
-        if candidate is not None and all(
-            candidate.objects.get(obj.name) is obj for obj in colliders
-        ):
-            collection = candidate
-    elif len(colliders) == 1:
-        scene_collections = {scene.collection}
-        scene_collections.update(scene.collection.children_recursive)
-        memberships = [
-            item for item in colliders[0].users_collection
-            if item in scene_collections
-        ]
-        if len(memberships) == 1:
-            collection = memberships[0]
-
-    if collection is not None:
-        scope = (
-            f"collection '{collection.name}' Collision objects"
-        )
-        return collection, colliders, scope
-
-    scope = f"current scene '{scene.name}' Collision objects"
+    scope = f"all Collision objects in current scene '{scene.name}'"
     return None, colliders, scope
 
 
@@ -315,7 +296,7 @@ def get_or_create_cloth_modifier(obj):
 
     bpy.context.view_layer.objects.active = obj
     obj.select_set(True)
-    return obj.modifiers.new(name="Blender Denim Cloth", type="CLOTH")
+    return obj.modifiers.new(name="Car Cover Cloth", type="CLOTH")
 
 
 def get_or_create_display_subsurf(obj):
@@ -341,6 +322,122 @@ def get_or_create_display_subsurf(obj):
     if current_index != last_index:
         obj.modifiers.move(current_index, last_index)
     return modifier
+
+
+def is_semantic_seam_group(name):
+    """Identify seam paths while excluding their single-vertex A/B markers."""
+
+    if name.endswith(("_A", "_B")):
+        return False
+    if name.startswith("SEAM_"):
+        return True
+    seam_id = name.split("_", 1)[0]
+    return seam_id.startswith("S") and seam_id[1:].isdigit()
+
+
+def write_seam_mask(obj):
+    """Combine all semantic seam groups into one point-domain float mask."""
+
+    group_indices = {
+        group.index
+        for group in obj.vertex_groups
+        if is_semantic_seam_group(group.name)
+    }
+    if not group_indices:
+        return 0, "missing semantic Sxxx_* / SEAM_* vertex groups"
+
+    attributes = obj.data.attributes
+    attribute = attributes.get(SEAM_MASK_ATTRIBUTE)
+    if attribute is not None and (
+        attribute.domain != "POINT" or attribute.data_type != "FLOAT"
+    ):
+        attributes.remove(attribute)
+        attribute = None
+    if attribute is None:
+        attribute = attributes.new(
+            name=SEAM_MASK_ATTRIBUTE,
+            type="FLOAT",
+            domain="POINT",
+        )
+
+    seam_vertices = 0
+    for vertex in obj.data.vertices:
+        is_seam = any(
+            membership.group in group_indices and membership.weight > 0.001
+            for membership in vertex.groups
+        )
+        attribute.data[vertex.index].value = 1.0 if is_seam else 0.0
+        seam_vertices += int(is_seam)
+    return seam_vertices, "ready"
+
+
+def get_or_create_seam_material():
+    """Build the deterministic mask-driven fabric and seam material."""
+
+    material = bpy.data.materials.get(SEAM_MATERIAL_NAME)
+    if material is None:
+        material = bpy.data.materials.new(SEAM_MATERIAL_NAME)
+    material.use_nodes = True
+    nodes = material.node_tree.nodes
+    links = material.node_tree.links
+    nodes.clear()
+
+    output = nodes.new("ShaderNodeOutputMaterial")
+    output.location = (520, 0)
+    shader = nodes.new("ShaderNodeBsdfPrincipled")
+    shader.location = (240, 0)
+    shader.inputs["Roughness"].default_value = FABRIC_ROUGHNESS
+
+    attribute = nodes.new("ShaderNodeAttribute")
+    attribute.attribute_name = SEAM_MASK_ATTRIBUTE
+    attribute.label = "Semantic seam mask"
+    attribute.location = (-520, 80)
+
+    ramp = nodes.new("ShaderNodeValToRGB")
+    ramp.location = (-280, 80)
+    ramp.color_ramp.interpolation = "CONSTANT"
+    ramp.color_ramp.elements[0].position = SEAM_MASK_THRESHOLD
+    ramp.color_ramp.elements[0].color = FABRIC_COLOR
+    ramp.color_ramp.elements[1].position = SEAM_MASK_THRESHOLD
+    ramp.color_ramp.elements[1].color = SEAM_COLOR
+
+    links.new(attribute.outputs["Fac"], ramp.inputs["Fac"])
+    links.new(ramp.outputs["Color"], shader.inputs["Base Color"])
+    links.new(shader.outputs["BSDF"], output.inputs["Surface"])
+    return material
+
+
+def configure_seam_texture(obj):
+    """Apply the procedural seam material to every cloth face."""
+
+    if not ENABLE_SEAM_TEXTURE:
+        return "disabled"
+    seam_vertices, mask_status = write_seam_mask(obj)
+    if not seam_vertices:
+        obj["cloth_seam_texture_status"] = mask_status
+        return mask_status
+
+    material = get_or_create_seam_material()
+    material_slot = next(
+        (
+            index
+            for index, slot_material in enumerate(obj.data.materials)
+            if slot_material == material
+        ),
+        None,
+    )
+    if material_slot is None:
+        obj.data.materials.append(material)
+        material_slot = len(obj.data.materials) - 1
+    for polygon in obj.data.polygons:
+        polygon.material_index = material_slot
+
+    obj["cloth_seam_texture"] = material.name
+    obj["cloth_seam_mask_attribute"] = SEAM_MASK_ATTRIBUTE
+    obj["cloth_seam_mask_vertex_count"] = seam_vertices
+    status = f"{material.name} ({seam_vertices} vertices)"
+    obj["cloth_seam_texture_status"] = status
+    return status
 
 
 def configure_post_cloth_seam_weld(obj, cloth_modifier):
@@ -1133,7 +1230,7 @@ def configure_roof_pin_driver(obj, modifier, pin_group, pin_indices):
 
 
 def configure_self_collision_driver(obj, modifier):
-    """Delay expensive self-collision until the sewing panels are aligned."""
+    """Enable self-collision at the configured offset (V27: scene start)."""
 
     collision = modifier.collision_settings
     collision.driver_remove("use_self_collision")
@@ -2437,8 +2534,8 @@ def apply_preset(obj, measured_difference_mm=None):
     settings.mass = MASS_PER_VERTEX
     settings.air_damping = AIR_DAMPING
 
-    # Blender's default Denim response: strong in-plane springs and moderate
-    # bending resistance produce broad folds rather than a thin-sheet drape.
+    # Keep in-plane stiffness while reducing bending resistance and damping.
+    # Mass is retained for comparison; this is not a calibrated fabric model.
     settings.tension_stiffness = TENSION_STIFFNESS
     settings.compression_stiffness = COMPRESSION_STIFFNESS
     settings.shear_stiffness = SHEAR_STIFFNESS
@@ -2523,6 +2620,11 @@ def apply_preset(obj, measured_difference_mm=None):
     if SHADE_SMOOTH:
         for polygon in obj.data.polygons:
             polygon.use_smooth = True
+
+    # Display-only seam line derived from semantic seam vertex groups. Apply
+    # it before the downstream Weld/Subsurf setup; it remains a mesh attribute
+    # and never changes modifier topology or Cloth input.
+    obj["cloth_seam_texture_status"] = configure_seam_texture(obj)
 
     weld_status = configure_post_cloth_seam_weld(obj, modifier)
     obj["cloth_post_seam_weld_status"] = weld_status
@@ -2638,6 +2740,7 @@ def main():
             f"post_weld={obj['cloth_post_seam_weld_status']}, "
             f"self_collision={obj['cloth_self_collision_status']}, "
             f"pin={obj['cloth_roof_pin_status']}, "
+            f"seam_texture={obj['cloth_seam_texture_status']}, "
             f"collision={obj['cloth_collision_scope']}, "
             f"top_down={top_down_status}, expansion={expansion_status}, "
             f"hem_down={rear_drag_status}"
@@ -2738,18 +2841,22 @@ def main():
         for object_name in baked_objects:
             print(f"  - {object_name}")
         print(
-            "请先执行 Physics > Cache > Delete Bake/Free Bake，再重新运行 V26，"
+            "请先执行 Physics > Cache > Delete Bake/Free Bake，再重新运行 V27，"
             "然后回到第 1 帧模拟。"
         )
 
     print("")
     print(
-        "V26 不预演或固定 HEM。先对前后下摆施加相同 Dynamic Mesh 张力，"
-        "第 32-45 帧再让车头多拉、车尾少拉；碰撞继续阻挡穿透并允许下摆滑动。"
+        "V27 使用 75 帧自然垂落预设：关闭 HEM Dynamic Mesh 补偿和高度反馈，"
+        "自碰撞从起始帧开启；缝合缓慢收拢后留出 40 帧自然沉降。"
     )
     print(
         "CC Post-Cloth Seam Weld 仅合并 loose sewing edge 的端点；它位于 Cloth "
         "之后，不会参与或改变物理解算。"
+    )
+    print(
+        "程序化 seam 材质读取 CC_SEAM_MASK；请在 Material Preview 或 Rendered "
+        "模式查看。它只改变表面显示，不参与物理解算。"
     )
     print(
         "CC Display Smooth 默认关闭视口、保留渲染，以避免 Weld 启用后逐帧"
