@@ -6,7 +6,7 @@ import unittest
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(PROJECT_ROOT / "scripts" / "blender"))
+sys.path.insert(0, str(PROJECT_ROOT / "scripts" / "blender" / "config_driven"))
 
 from seam_naming import (  # noqa: E402
     endpoint_marker_names,

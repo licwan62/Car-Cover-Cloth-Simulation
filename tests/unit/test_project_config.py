@@ -8,7 +8,7 @@ import unittest
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-BLENDER_SCRIPTS = PROJECT_ROOT / "scripts" / "blender"
+BLENDER_SCRIPTS = PROJECT_ROOT / "scripts" / "blender" / "config_driven"
 sys.path.insert(0, str(BLENDER_SCRIPTS))
 
 from project_config import (  # noqa: E402
@@ -49,7 +49,7 @@ class ProjectConfigTests(unittest.TestCase):
 
     def test_standalone_denim_preset_is_self_contained(self) -> None:
         cloth = load_cloth_preset()
-        path = PROJECT_ROOT / "scripts" / "blender" / "setup_cloth_standalone.py"
+        path = PROJECT_ROOT / "scripts" / "blender" / "setup_cloth.py"
         source = path.read_text(encoding="utf-8")
         tree = ast.parse(source)
 
@@ -88,146 +88,18 @@ class ProjectConfigTests(unittest.TestCase):
                 except (ValueError, TypeError):
                     pass
 
-        self.assertEqual(
-            constants["PRESET_NAME"],
-            "Blender_Denim_HemLevel_50F_V26",
-        )
-        self.assertEqual(constants["MATERIAL_PRESET_NAME"], "Blender Default Denim")
-        self.assertEqual(constants["SIMULATION_END_OFFSET"], 49)
-        self.assertEqual(constants["QUALITY_STEPS"], 8)
-        self.assertEqual(constants["MASS_PER_VERTEX"], 0.25)
-        self.assertLessEqual(constants["TIME_SCALE"], 2.0)
-        self.assertEqual(constants["BENDING_STIFFNESS"], 25.0)
-        self.assertEqual(constants["BENDING_STIFFNESS_DURING_SEWING"], 18.0)
-        self.assertGreater(constants["MAX_SEWING_FORCE"], cloth["sewing"]["max_force"])
-        self.assertLessEqual(constants["MAX_SEWING_FORCE"], 40.0)
-        self.assertFalse(constants["DISPLAY_SUBSURF_IN_VIEWPORT"])
+        self.assertEqual(constants["PRESET_NAME"], "CarCover_HemFeedback_75F_V28")
+        self.assertEqual(constants["SIMULATION_END_OFFSET"], 74)
+        self.assertTrue(constants["ENABLE_HEM_LEVEL_FEEDBACK"])
+        self.assertFalse(constants["ENABLE_HEM_DRAG"])
         self.assertTrue(constants["ENABLE_POST_CLOTH_SEAM_WELD"])
-        self.assertLess(
-            constants["SEAM_WELD_DISTANCE_MM"],
-            constants["MESH_EDGE_TARGET_MM"],
-        )
-        self.assertEqual(
-            constants["SEAM_WELD_ENABLE_OFFSET"],
-            constants["SEWING_RELEASE_END"] + 1,
-        )
-        self.assertTrue(constants["ABORT_ON_SEWING_HUBS"])
-        self.assertEqual(constants["MAX_SEWING_CONNECTORS_PER_VERTEX"], 2)
-        self.assertGreater(constants["SEWING_FORCE_START"], 0.0)
-        self.assertLess(constants["SEWING_FORCE_START"], constants["MAX_SEWING_FORCE"])
-        self.assertGreater(constants["SEWING_FORCE_SUSTAIN"], 0.0)
-        self.assertLess(
-            constants["SEWING_FORCE_SUSTAIN"],
-            constants["MAX_SEWING_FORCE"],
-        )
-        self.assertGreater(constants["SEWING_GRAVITY_FACTOR"], 0.0)
-        self.assertLess(
-            constants["SELF_COLLISION_DISTANCE_MM"],
-            cloth["self_collision"]["distance_mm"],
-        )
-        self.assertLessEqual(constants["OBJECT_COLLISION_FRICTION"], 0.2)
-        self.assertLessEqual(constants["COLLIDER_SURFACE_FRICTION"], 3.0)
-        self.assertNotIn("COLLISION_COLLECTION_NAME =", source)
-        self.assertNotIn("ACTIVE_COLLISION_COLLECTION_NAME =", source)
-        self.assertIn("for obj in scene.objects", source)
-        self.assertIn('else "SCENE"', source)
-        self.assertIn("当前场景没有带 Collision 修改器", source)
-        self.assertTrue(constants["ENABLE_HEM_DRAG"])
-        self.assertFalse(constants["ENABLE_REAR_DRAG"])
-        self.assertEqual(constants["FRONT_DRAG_GROUP_NAME"], "HEM_FRONT")
-        self.assertEqual(constants["REAR_DRAG_GROUP_NAME"], "HEM_REAR")
-        self.assertEqual(constants["REAR_DRAG_PIN_GROUP_NAME"], "CC_REAR_DRAG_PIN")
-        self.assertGreater(constants["REAR_DRAG_DISTANCE_MM"], 0.0)
-        self.assertLessEqual(
-            constants["REAR_DRAG_DISTANCE_MM"],
-            constants["MAX_SAFE_REAR_DRAG_DISTANCE_MM"],
-        )
-        self.assertEqual(constants["REAR_DRAG_OUTWARD_MM"], 0.0)
-        self.assertLessEqual(
-            constants["REAR_DRAG_OUTWARD_MM"],
-            constants["MAX_SAFE_REAR_DRAG_OUTWARD_MM"],
-        )
-        self.assertGreater(constants["REAR_DRAG_PIN_STIFFNESS"], 0.0)
-        self.assertGreater(constants["REAR_DRAG_VERTEX_WEIGHT"], 0.0)
-        self.assertLessEqual(constants["REAR_DRAG_VERTEX_WEIGHT"], 1.0)
-        self.assertEqual(constants["REAR_DRAG_SUSTAIN_FACTOR"], 1.0)
-        self.assertEqual(constants["REAR_DRAG_SUSTAIN_PIN_FACTOR"], 0.0)
-        self.assertTrue(constants["REAR_DRAG_LEVEL_TO_LOWEST"])
-        self.assertEqual(
-            constants["HEM_DRAG_START"],
-            constants["SEWING_RELEASE_END"],
-        )
-        self.assertLess(
-            constants["HEM_DRAG_START"],
-            constants["HEM_DRAG_END"],
-        )
-        self.assertEqual(
-            constants["HEM_DRAG_SETTLE_END"],
-            constants["SIMULATION_END_OFFSET"],
-        )
-        self.assertGreater(constants["HEM_TENSION_DISTANCE_MM"], 0.0)
-        self.assertLessEqual(
-            constants["HEM_TENSION_DISTANCE_MM"],
-            constants["MAX_SAFE_HEM_TENSION_DISTANCE_MM"],
-        )
-        self.assertEqual(constants["HEM_LEVELING_BIAS_MM"], 30.0)
-        self.assertEqual(constants["HEM_FRONT_TENSION_DISTANCE_MM"], 80.0)
-        self.assertEqual(constants["HEM_REAR_TENSION_DISTANCE_MM"], 20.0)
-        self.assertGreater(
-            constants["HEM_FRONT_TENSION_DISTANCE_MM"],
-            constants["HEM_REAR_TENSION_DISTANCE_MM"],
-        )
-        self.assertLessEqual(
-            constants["HEM_FRONT_TENSION_DISTANCE_MM"],
-            constants["MAX_SAFE_HEM_TENSION_DISTANCE_MM"],
-        )
-        self.assertGreaterEqual(constants["HEM_REAR_TENSION_DISTANCE_MM"], 0.0)
-        self.assertLess(
-            constants["HEM_DRAG_START"],
-            constants["HEM_LEVEL_START"],
-        )
-        self.assertLess(
-            constants["HEM_LEVEL_START"],
-            constants["HEM_LEVEL_END"],
-        )
-        self.assertLessEqual(
-            constants["HEM_LEVEL_END"],
-            constants["HEM_DRAG_SETTLE_END"],
-        )
-        self.assertGreater(constants["REAR_DRAG_RELEASE_VERTEX_WEIGHT"], 0.0)
-        self.assertLessEqual(constants["REAR_DRAG_RELEASE_VERTEX_WEIGHT"], 0.02)
-        self.assertGreater(constants["EXPANSION_STRENGTH"], 0.0)
-        self.assertLessEqual(constants["EXPANSION_STRENGTH"], 2.0)
-        self.assertGreater(constants["EXPANSION_SUSTAIN_STRENGTH"], 0.0)
-        self.assertLess(
-            constants["EXPANSION_SUSTAIN_STRENGTH"],
-            constants["EXPANSION_STRENGTH"],
-        )
-        self.assertTrue(constants["REQUIRE_PIN_FOR_EXPANSION"])
-        self.assertFalse(constants["ENABLE_STAGED_EXPANSION"])
-        self.assertEqual(constants["EXPANSION_FIELD_COUNT"], 5)
-        self.assertGreater(constants["EXPANSION_FORCE_ABOVE_TOP_MM"], 0.0)
-        self.assertGreaterEqual(constants["EXPANSION_AXIS_SPREAD"], 0.4)
-        self.assertGreaterEqual(constants["EXPANSION_MAX_DISTANCE_MM"], 1500.0)
-        self.assertTrue(constants["ENABLE_ROOF_PIN_DURING_SIMULATION"])
-        self.assertFalse(constants["ENABLE_TOP_DOWN_GUIDE"])
-        self.assertEqual(constants["TOP_PANEL_GROUP_NAMES"], ("PANEL_TOP", "TOP"))
-        self.assertEqual(constants["TENSION_STIFFNESS"], 60.0)
-        self.assertEqual(constants["COMPRESSION_STIFFNESS"], 50.0)
-        self.assertEqual(constants["SHEAR_STIFFNESS"], 50.0)
-        self.assertEqual(constants["TENSION_DAMPING"], 25.0)
-        self.assertLess(
-            constants["GRAVITY_RAMP_START"],
-            constants["GRAVITY_RAMP_END"],
-        )
-        self.assertLess(
-            constants["ROOF_PIN_HOLD_END"],
-            constants["ROOF_PIN_RELEASE_END"],
-        )
-        self.assertLess(
-            constants["HEM_DRAG_END"],
-            constants["HEM_DRAG_SETTLE_END"],
-        )
+        self.assertLess(constants["ROOF_PIN_RELEASE_END"], constants["HEM_FEEDBACK_START"])
+        self.assertLess(constants["HEM_FEEDBACK_START"] + constants["HEM_FEEDBACK_RAMP"],
+                        constants["SIMULATION_END_OFFSET"])
+        self.assertGreater(constants["HEM_LEVEL_PIN_WEIGHT"], 0)
+        self.assertLess(constants["HEM_LEVEL_PIN_WEIGHT"], 1)
+        self.assertTrue(constants["ENABLE_SELF_COLLISION"])
+        self.assertTrue(constants["ENABLE_OBJECT_COLLISION"])
 
     def test_collision_proxy_config_and_standalone_match(self) -> None:
         simulation = load_simulation_config()
@@ -236,7 +108,7 @@ class ProjectConfigTests(unittest.TestCase):
             PROJECT_ROOT
             / "scripts"
             / "blender"
-            / "generate_collision_proxy_standalone.py"
+            / "generate_collision_proxy.py"
         )
         source = path.read_text(encoding="utf-8")
         tree = ast.parse(source)

@@ -2,20 +2,39 @@
 
 | Module | Responsibility | Current status |
 | --- | --- | --- |
-| `project_config.py` | Load and validate project JSON | Blender-independent |
-| `seam_naming.py` | Parse `S001_PANEL[_A\|_B]` names | Blender-independent |
-| `repair_boundary.py` | Endpoint weld, small-gap bridge, boundary validation | Migrated existing implementation |
-| `generate_cloth_mesh.py` | Uniform sampling and constrained Delaunay mesh | Migrated existing implementation |
-| `generate_sewing.py` | Select seam paths and create Sewing Springs | Semantic ID pairing, A/B direction and legacy fallback integrated |
-| `generate_sewing_standalone.py` | Build Sewing directly from a semantic SVG | Creates PANEL/SEAM/HEM and automatic A/B vertex groups, then arc-length-matched loose edges without project imports |
-| `setup_cloth.py` | Apply Oxford cloth settings | Config-driven SmoothDrape V2 preset |
-| `setup_cloth_standalone.py` | Apply the self-contained HemLevel 50F V26 preset | Fast staged Sewing, unpinned front/rear HEM leveling, delayed self-collision, collision-safe sliding, no force fields, seam-only post-Cloth Weld, and render-only display subdivision |
-| `setup_mirror_markers.py` | Add left/right mirror-position comparison marks | Config-driven, non-physical face-material marks based on TESLA-MODELX.ai artboard 1 |
-| `setup_mirror_markers_standalone.py` | Add the same mirror-position marks without project dependencies | Opens an interactive `MARKER_CONFIG` dialog before applying non-physical marks at the settled frame |
-| `generate_collision_proxy.py` | Generate a smooth vehicle Collision Proxy | Reads `config/simulation.json`; delegates geometry work to the matching standalone implementation |
-| `generate_collision_proxy_standalone.py` | Generate the same Collision Proxy without project dependencies | Embedded FastCollisionShell V5 settings; original evaluated topology, zero-or-one rear-wing support, optional voxel remesh, 18k-triangle collision budget, source-bounds correction, and Collision physics |
-| `generate_collision_shell_standalone.py` | Test a two-stage watertight collision-shell workflow | Creates a 35 mm inspection Outer Shell with adaptive thin-panel repair, extracts a 50 mm/6k-triangle Collision only from that shell, restores source bounds, and rejects disconnected or non-manifold output |
+| `config_driven/project_config.py` | Load and validate project JSON | Blender-independent |
+| `config_driven/seam_naming.py` | Parse `S001_PANEL[_A\|_B]` names | Blender-independent |
+| `config_driven/repair_boundary.py` | Endpoint weld, small-gap bridge, boundary validation | Migrated existing implementation |
+| `config_driven/generate_cloth_mesh.py` | Uniform sampling and constrained Delaunay mesh | Migrated existing implementation |
+| `config_driven/generate_sewing.py` | Select seam paths and create Sewing Springs | Semantic ID pairing, A/B direction and legacy fallback integrated |
+| `generate_sewing.py` | Build Sewing directly from a semantic SVG | Creates PANEL/SEAM/HEM and automatic A/B vertex groups, then arc-length-matched loose edges without project imports |
+| `config_driven/setup_cloth.py` | Apply Oxford cloth settings | Config-driven SmoothDrape V2 preset |
+| `setup_cloth.py` | Apply the self-contained HemFeedback 75F V28 preset | Late per-vertex animated soft pin springs, object/self collision, and seam material |
+| `config_driven/setup_mirror_markers.py` | Add left/right mirror-position comparison marks | Config-driven, non-physical face-material marks based on TESLA-MODELX.ai artboard 1 |
+| `setup_mirror_markers.py` | Add the same mirror-position marks without project dependencies | Opens an interactive `MARKER_CONFIG` dialog before applying non-physical marks at the settled frame |
+| `config_driven/generate_collision_proxy.py` | Generate a smooth vehicle Collision Proxy | Reads `config/simulation.json`; delegates geometry work to the matching self-contained implementation |
+| `generate_collision_proxy.py` | Generate the same Collision Proxy without project dependencies | Embedded FastCollisionShell V5 settings; original evaluated topology, zero-or-one rear-wing support, optional voxel remesh, 18k-triangle collision budget, source-bounds correction, and Collision physics |
+| `generate_collision_shell.py` | Test a two-stage watertight collision-shell workflow | Creates a 35 mm inspection Outer Shell with adaptive thin-panel repair, extracts a 50 mm/6k-triangle Collision only from that shell, restores source bounds, and rejects disconnected or non-manifold output |
+| `setup_cloth_fit_test.py` | Apply a lightweight Cloth preset | Quick car-cover fit test with embedded settings |
 | `export_three_views.py` | Real-size three-view SVG/PNG export | Auxiliary reporting tool |
+| `export_six_views.py` | Four orthographic views and two perspective views | Six PNGs and an embedded SVG atlas; self-contained |
+
+## Six-view atlas
+
+Activate the vehicle Mesh at the desired frame and run
+`export_six_views.py` in Blender's Text Editor. The script
+exports LEFT, FRONT, TOP, REAR, LEFT_FRONT and LEFT_REAR PNGs plus a three-row,
+two-column SVG atlas into `SIX_VIEWS/<object name>/` beside the saved blend file
+(Desktop for an unsaved file). Reruns overwrite the matching export files.
+Only the active Mesh is rendered, including its evaluated modifiers.
+
+The four orthographic images retain millimetre dimensions in the SVG;
+perspective images are visual references without a measurement scale. The
+canvas grows as needed. Z is height and the longer world X/Y extent is length.
+Adjust `LEFT_SIGN` and `FRONT_SIGN` for the model orientation; the perspective
+views follow these same settings. Sampling density, perspective focal length
+and elevation are configurable at the top of the script. Render settings and
+object render visibility are restored after export, including render failures.
 
 The default Collision Proxy preserves the evaluated source topology and overall
 X/Y/Z bounds. Whole-vehicle voxel remeshing and smoothing are disabled. When
@@ -30,10 +49,10 @@ If a deliberately tapered drape-support shell is needed, enable
 `lower_body_inset` and save it as a separate proxy; do not use that altered
 shell for Fit metrics.
 
-## Standalone selection order
+## Self-contained selection order
 
-`generate_collision_proxy_standalone.py` leaves the generated proxy selected so
-it can be inspected. Before running `setup_cloth_standalone.py`, select the
+`generate_collision_proxy.py` leaves the generated proxy selected so
+it can be inspected. Before running `setup_cloth.py`, select the
 actual car-cover mesh; selecting the proxy as well is harmless because the cloth
 script recognizes and skips meshes with Collision physics. Collider activation
 no longer depends on `CC_COLLISION_PROXY` or any other collection name. Every
@@ -41,13 +60,12 @@ Mesh with a Collision modifier in the current scene participates, while objects
 that belong only to another scene do not. This makes switching scenes sufficient
 to switch vehicle colliders; collection names are free to describe each model.
 If an older run already added Cloth to the proxy, remove that Cloth modifier.
-Free the old Cloth bake before running V26, return to frame 1, run the script,
-and then bake frames 1-50. V26 does not pre-simulate during setup and removes
-the expensive trajectory Shape Keys and fixed HEM Pin generated by V24.
+Free the old Cloth bake before running V28. Setup samples a free trajectory;
+then replay frames 1-75 to evaluate the late HEM spring guidance.
 
 ## Two-stage collision shell test
 
-Use `generate_collision_shell_standalone.py` when a detailed vehicle consists
+Use `generate_collision_shell.py` when a detailed vehicle consists
 of many panels, wheels, glass and interior islands. Select only the original
 vehicle meshes and run the script in Object Mode. It creates two objects in
 与活动目标物体同名的集合（未激活有效源物体时使用首个有效源物体名）：
@@ -79,37 +97,32 @@ with zero boundary/non-manifold edges and exact source dimensions. A frame
 
 ## Sewing and final seam closure
 
-The V26 standalone cloth preset ramps the Sewing cap from 8 to 40 by frame 8,
-then releases it to a sustained value of 6 by frame 18. Bending stiffness
-recovers from 18 to the final denim value 25 over the same fitting stage. The
-temporary roof Pin is fully released by frame 16. From frame 18 to frame 41,
-one smooth Dynamic Mesh Shape Key shifts `HEM_FRONT` and `HEM_REAR` rest
-coordinates 50 mm downward. From frame 32 to frame 45, a second smooth key adds
-30 mm of front pull while releasing 30 mm of rear pull. The final effective
-rest offsets are therefore 80 mm at the front and 20 mm at the rear. This late
-trim reduces a front-high hem without pinning either end or forcing an absolute
-height. Vehicle collision, cloth friction 0.2, and collider surface friction 3
-can still stop penetration and let a caught hem slide down the hood or rear
-body. The trim is held through frame 50. Both semantic HEM groups are required,
-must not overlap, and all generated or legacy HEM Wind/Force fields remain
-disabled.
+The self-contained V28 cloth preset first samples a 75-frame free drape during
+setup, then returns to Scene Start for the guided replay. Frames 45-65 ramp
+soft pin spring forces on every semantic `HEM` / `HEM_*` vertex; frames 65-75
+hold the targets at one world-Z height. This corrects both left/right and
+front/rear target differences rather than just shifting two group averages.
+The default target is the global HEM mean at frame 45. Override
+`HEM_FEEDBACK_TARGET_Z` in metres to choose a specific plane.
 
-Blender Sewing Springs pull loose-edge endpoints together but do not merge the
-base-mesh vertices. `CC Post-Cloth Seam Weld` therefore runs after Cloth and is
-limited to the sewing endpoints. With the normal scene start of frame 1, its
-threshold remains zero through frame 18 and becomes 6 mm at frame 19, after the
-sewing-force release. It changes only the evaluated/final mesh and never feeds
-changed topology back into the Cloth solver.
+Each vertex target retains its sampled free-drape X/Y trajectory while Z moves
+smoothly toward the common plane. Soft pins can exert horizontal forces if the
+guided cloth departs from that trajectory; they are not Z-only constraints.
+`HEM_LEVEL_PIN_WEIGHT` defaults to 0.8. The setup rejects a target more than
+350 mm from any sampled HEM vertex at frame 45. Tiny initial HEM weights keep
+spring constraints available before the late acquisition. Roof pins retain
+their early hold/release schedule. Dynamic rest-mesh correction stays disabled.
+Vehicle collisions remain enabled, but exact final leveling depends on contact,
+pin weight and available cloth length. Inspect the final result before baking.
 
-`CC Display Smooth` remains enabled for rendering but is disabled in the
-viewport by default. A live Catmull-Clark modifier after the changing Weld
-topology otherwise rebuilds its subdivision topology every frame and makes
-Blender appear stuck at frame 18 while frame 19 is evaluated. Enable it in the
-viewport only when previewing a settled frame. To make the seam closure
-permanent, first bake or duplicate the settled frame, then apply Cloth and Weld
-on the duplicate.
+Free the old Cloth bake before setup and replay sequentially from Scene Start.
+Setup runs a full free simulation and stores one trajectory key per frame, so
+it costs time and memory on large meshes. Fixed Shape Keys and frame drivers
+avoid modifying geometry from simulation handlers. Weld and subdivision are
+only disabled temporarily while sampling, then their visibility is restored.
+Rerun setup after changing geometry or physical parameters.
 
-Both `generate_sewing.py` and the V26 setup preflight reject a vertex connected
+Both `generate_sewing.py` and the V28 setup preflight reject a vertex connected
 to more than two loose sewing edges. Such a many-to-one hub is a topology error
 that creates the tail "black-hole" effect; increasing Sewing force would make
 it worse rather than correct it.
@@ -122,7 +135,7 @@ Artboard 1 of `illustrator/TESLA-MODELX.ai` places the mirror-pocket center
 1600 mm behind the front-bottom endpoint and 1020 mm above it. The left-side
 charge-port center is 340 mm from the rear-bottom endpoint and 820 mm above it.
 At the settled comparison frame, activate the Cloth mesh and run
-`setup_mirror_markers.py`. The evaluated `PANEL_LEFT` and `PANEL_RIGHT` vertex
+`config_driven/setup_mirror_markers.py`. The evaluated `PANEL_LEFT` and `PANEL_RIGHT` vertex
 groups provide separate side-panel coordinate references, so `PANEL_TOP` and
 vehicle Collision bounds cannot shift the marks. The script paints
 small left/right mirror marks orange-red and the left charge-port mark blue. It does not create a mirror-pocket
@@ -130,11 +143,10 @@ mesh or affect Cloth, Collision, mass, sewing, or Fit geometry. If the vehicle
 front axis differs from the Model X scene's default -Y, change
 `mirror_markers.front_axis` in `config/simulation.json`.
 
-## Standalone policy
+## Script organization
 
-Every executable Blender workflow added from this point forward must ship a
-matching `*_standalone.py` entry point. A standalone entry point may import
-Blender/Python standard modules, but must not read project JSON or import local
-project modules, so it can be pasted into a `.blend` Text block. Pure helper
-modules such as `project_config.py` and `seam_naming.py` are not executable
-workflow entry points and do not need standalone duplicates.
+Scripts in `scripts/blender/` use embedded settings and run without project JSON.
+`config_driven/` contains JSON-driven workflows and their helper modules.
+Run configuration-driven scripts from their saved project paths. Their JSON
+files remain in the repository's `config/` directory. Collision-proxy and
+mirror-marker wrappers reuse the implementations in the parent directory.

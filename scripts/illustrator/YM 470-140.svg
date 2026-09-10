@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="PANEL" xmlns="http://www.w3.org/2000/svg" width="10000mm" height="7070.7mm" viewBox="0 0 2834.65 2004.29">
+  <rect id="PANEL_TOP" x="555.42" y="707.2" width="1889.86" height="425.2" fill="none" stroke="#39b54a" stroke-linecap="square" stroke-linejoin="round" stroke-width="3"/>
+  <path id="PANEL_RIGHT" d="M2119.99,1590.4H787.7v-198.43c0-120.49,64.67-198.42,199.71-198.42,118.69,0,450.33,0,505.87,0,38.27,0,88.76,18.75,145.58,41.88,60.17,24.5,126.75,53.69,168.05,62.87,46.35,10.3,93.58,13.05,189.48,18.53,83.19,4.76,123.59,77.17,123.59,117.59v155.97Z" fill="none" stroke="#39b54a" stroke-linecap="square" stroke-linejoin="round" stroke-width="3"/>
+  <path id="PANEL_LEFT" d="M2119.99,226.4H787.7v198.43c0,120.49,64.67,198.42,199.71,198.42,118.69,0,450.33,0,505.87,0,38.27,0,88.76-18.75,145.58-41.88,60.17-24.5,126.75-53.69,168.05-62.87,46.35-10.3,93.58-13.05,189.48-18.53,83.19-4.76,123.59-77.17,123.59-117.59v-155.97Z" fill="none" stroke="#39b54a" stroke-linecap="square" stroke-linejoin="round" stroke-width="3"/>
+</svg>

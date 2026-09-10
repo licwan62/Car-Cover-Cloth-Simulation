@@ -1,1174 +1,608 @@
-import bpy
+"""Build semantic seam vertex groups and Sewing loose edges from an SVG.
+
+Blender usage:
+1. Import/mesh the SVG PANEL objects and select the flat panel Mesh objects.
+2. Run this script and choose the matching semantic SVG file.
+3. Selected Mesh objects are joined automatically. The script creates
+   PANEL/HEM groups, maps SEAM paths to boundary vertices,
+   creates automatic Sxxx_PANEL_A/B groups, then creates matched loose edges.
+
+The SVG must contain PANEL and SEAM groups. Each Sxxx ID must occur exactly
+twice, for example S001_TOP and S001_LEFT. MARK is not required: SVG path
+starts become A and path ends become B, except TOP seams are normalized so A is
+the left endpoint and B is the right endpoint. Run this before arranging in 3D.
+"""
+
+import re
+import xml.etree.ElementTree as ET
+from collections import defaultdict
+
 import bmesh
-import bisect
-from pathlib import Path
-import sys
+import bpy
+from bpy_extras.io_utils import ImportHelper
+from mathutils import Vector
 
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-if str(SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPT_DIR))
-
-from project_config import load_simulation_config
-from seam_naming import (
-    endpoint_marker_names,
-    pair_seam_paths,
-    parse_seam_name,
-    validate_direction_markers,
-)
-
-
-# ============================================================
-# SEAM 配对
-# ============================================================
-
-SEWING_CONFIG = load_simulation_config()["sewing"]
-LEGACY_SEAM_PAIRS = [tuple(pair) for pair in SEWING_CONFIG["legacy_pairs"]]
-
-
-# ============================================================
-# 设置
-# ============================================================
-
-# 重跑脚本时：
-# 自动删除原有 Loose Edge / Sewing Spring
-DELETE_EXISTING_LOOSE_EDGES = bool(
-    SEWING_CONFIG["delete_existing_loose_edges"]
-)
-
-# 自动把误选顶点从 Vertex Group 中移除
-CLEAN_VERTEX_GROUPS = bool(SEWING_CONFIG["clean_vertex_groups"])
-
-# 小于这个长度的独立边段直接视作误选
-MIN_SEGMENT_LENGTH_MM = float(SEWING_CONFIG["minimum_segment_length_mm"])
-
-MIN_SEGMENT_LENGTH = (
-    MIN_SEGMENT_LENGTH_MM / 1000.0
-)
-
-# A boundary corner may legitimately participate in two seams. Three or more
-# sewing connectors on one vertex create a many-to-one convergence point and
-# are rejected before any new loose edges are written.
+# Standalone settings: 1 Blender unit = 1 metre.
+MIN_SEGMENT_LENGTH_MM = 20.0
+MAX_LENGTH_DIFFERENCE_RATIO = 0.15
+MAPPING_TOLERANCE_FACTOR = 0.70
+MAX_MAPPING_ERROR_FACTOR = 1.50
 MAX_SEWING_CONNECTORS_PER_VERTEX = 2
+DELETE_EXISTING_LOOSE_EDGES = True
+FLAT_PANEL_TOLERANCE_MM = 2.0
+TOP_SEAMS_LEFT_TO_RIGHT = True
+
+_SEAM_NAME = re.compile(r"^(?:SEAM_)?(?P<id>S\d{3,})_(?P<panel>[A-Z][A-Z0-9]*)$")
+_PATH_TOKEN = re.compile(
+    r"[MmLlHhVvCcZz]|[-+]?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?"
+)
 
 
-# ============================================================
-# 当前对象
-# ============================================================
-
-obj = bpy.context.active_object
-
-if obj is None or obj.type != 'MESH':
-    raise RuntimeError(
-        "请先选中 Ctrl+J 后的 Cloth Mesh 对象。"
-    )
-
-if obj.mode != 'OBJECT':
-    raise RuntimeError(
-        "请先切换到 Object Mode。"
-    )
-
-mesh = obj.data
-mw = obj.matrix_world
+def _local_name(tag):
+    return tag.rsplit("}", 1)[-1]
 
 
-# New projects derive pairs solely from the Sewing ID. Legacy names are used
-# only when no semantic pair exists and compatibility is explicitly enabled.
-vertex_group_names = [group.name for group in obj.vertex_groups]
-SEAM_PAIRS = pair_seam_paths(vertex_group_names)
+def _distance_to_segment(point, start, end):
+    delta = end - start
+    length_squared = delta.length_squared
+    if length_squared <= 1.0e-20:
+        return (point - start).length
+    factor = max(0.0, min(1.0, (point - start).dot(delta) / length_squared))
+    return (point - (start + factor * delta)).length
 
-if SEAM_PAIRS:
-    direction_errors = validate_direction_markers(vertex_group_names)
-    if direction_errors:
-        raise RuntimeError(
-            "语义 Sewing Group 缺少 A/B 方向标记：\n"
-            + "\n".join(direction_errors)
-        )
-    print(f"[Preflight] semantic Sewing pairs: {len(SEAM_PAIRS)}")
-elif SEWING_CONFIG["allow_legacy_pairs"]:
-    SEAM_PAIRS = LEGACY_SEAM_PAIRS
-    print("[Preflight] using configured legacy Sewing pairs")
-else:
-    raise RuntimeError(
-        "没有找到 S001_PANEL 形式的语义 Sewing Group，且旧命名兼容已关闭。"
+
+def _distance_to_polyline(point, polyline):
+    return min(
+        _distance_to_segment(point, polyline[index - 1], polyline[index])
+        for index in range(1, len(polyline))
     )
 
 
-# ============================================================
-# 基础函数
-# ============================================================
-
-def world_co(i):
-    return mw @ mesh.vertices[i].co
-
-
-def path_length(path):
-
-    return sum(
-        (
-            world_co(path[i])
-            -
-            world_co(path[i - 1])
-        ).length
-
-        for i in range(1, len(path))
+def _cubic(a, b, c, d, factor):
+    inverse = 1.0 - factor
+    return (
+        a * (inverse ** 3)
+        + b * (3.0 * inverse * inverse * factor)
+        + c * (3.0 * inverse * factor * factor)
+        + d * (factor ** 3)
     )
 
 
-# ============================================================
-# 删除旧 Loose Edge
-# ============================================================
+def _flatten_path(data, curve_steps=16):
+    """Flatten Illustrator M/L/H/V/C/Z path data into one polyline."""
 
-def delete_loose_edges():
+    tokens = _PATH_TOKEN.findall(data.replace(",", " "))
+    points = []
+    cursor = Vector((0.0, 0.0))
+    subpath_start = None
+    command = None
+    index = 0
 
-    bm = bmesh.new()
-    bm.from_mesh(mesh)
+    def number():
+        nonlocal index
+        if index >= len(tokens) or tokens[index].isalpha():
+            raise ValueError("SVG path command is missing a coordinate")
+        value = float(tokens[index])
+        index += 1
+        return value
 
-    loose = [
-        e for e in bm.edges
-        if len(e.link_faces) == 0
-    ]
+    while index < len(tokens):
+        if tokens[index].isalpha():
+            command = tokens[index]
+            index += 1
+        if command is None:
+            raise ValueError("SVG path must begin with M/m")
+        relative = command.islower()
+        upper = command.upper()
 
-    count = len(loose)
+        if upper == "Z":
+            if subpath_start is not None and (not points or points[-1] != subpath_start):
+                points.append(subpath_start.copy())
+            cursor = subpath_start.copy()
+            command = None
+            continue
+        if upper == "M" or upper == "L":
+            value = Vector((number(), number()))
+            cursor = cursor + value if relative else value
+            points.append(cursor.copy())
+            if upper == "M":
+                subpath_start = cursor.copy()
+                command = "l" if relative else "L"
+            continue
+        if upper == "H":
+            value = number()
+            cursor.x = cursor.x + value if relative else value
+            points.append(cursor.copy())
+            continue
+        if upper == "V":
+            value = number()
+            cursor.y = cursor.y + value if relative else value
+            points.append(cursor.copy())
+            continue
+        if upper == "C":
+            values = [number() for _ in range(6)]
+            control_a = Vector(values[0:2])
+            control_b = Vector(values[2:4])
+            end = Vector(values[4:6])
+            if relative:
+                control_a += cursor
+                control_b += cursor
+                end += cursor
+            start = cursor.copy()
+            for step in range(1, curve_steps + 1):
+                points.append(_cubic(start, control_a, control_b, end, step / curve_steps))
+            cursor = end
+            continue
+        raise ValueError(f"Unsupported SVG path command: {command}")
 
-    if loose:
-
-        bmesh.ops.delete(
-            bm,
-            geom=loose,
-            context='EDGES'
-        )
-
-        bm.to_mesh(mesh)
-        mesh.update()
-
-    bm.free()
-
-    return count
+    if len(points) < 2:
+        raise ValueError("SVG path contains fewer than two points")
+    return points
 
 
-if DELETE_EXISTING_LOOSE_EDGES:
+def _element_polyline(element):
+    kind = _local_name(element.tag)
+    if kind == "line":
+        return [
+            Vector((float(element.get("x1", 0.0)), float(element.get("y1", 0.0)))),
+            Vector((float(element.get("x2", 0.0)), float(element.get("y2", 0.0)))),
+        ]
+    if kind == "rect":
+        x = float(element.get("x", 0.0))
+        y = float(element.get("y", 0.0))
+        width = float(element.get("width", 0.0))
+        height = float(element.get("height", 0.0))
+        return [
+            Vector((x, y)), Vector((x + width, y)),
+            Vector((x + width, y + height)), Vector((x, y + height)),
+            Vector((x, y)),
+        ]
+    if kind == "path":
+        return _flatten_path(element.get("d", ""))
+    raise ValueError(f"Unsupported semantic SVG element: {kind}")
 
-    removed_loose = delete_loose_edges()
 
-    print(
-        f"[Preflight] "
-        f"removed old/stray loose edges: "
-        f"{removed_loose}"
-    )
+def _semantic_svg(filepath):
+    root = ET.parse(filepath).getroot()
+    panels = {}
+    seams = {}
+    hems = {}
 
+    def visit(element, semantic_layer=None):
+        element_id = element.get("id", "")
+        if _local_name(element.tag) == "g" and element_id in {"PANEL", "SEAM", "HEM"}:
+            semantic_layer = element_id
+        kind = _local_name(element.tag)
+        if semantic_layer in {"PANEL", "SEAM", "HEM"} and kind in {"path", "line", "rect"}:
+            if not element_id:
+                raise ValueError(f"{semantic_layer} contains an unnamed {kind}")
+            target = {"PANEL": panels, "SEAM": seams, "HEM": hems}[semantic_layer]
+            if element_id in target:
+                raise ValueError(f"Duplicate SVG id: {element_id}")
+            target[element_id] = _element_polyline(element)
+        for child in element:
+            visit(child, semantic_layer)
 
-# ============================================================
-# Edge 使用 Face 数
-# ============================================================
+    visit(root)
+    if not panels:
+        raise ValueError("SVG does not contain named geometry in the PANEL group")
+    if not seams:
+        raise ValueError("SVG does not contain named geometry in the SEAM group")
 
-def build_edge_face_count():
-
-    counts = {
-        tuple(sorted(e.vertices)): 0
-        for e in mesh.edges
-    }
-
-    for p in mesh.polygons:
-
-        vs = list(p.vertices)
-
-        for i in range(len(vs)):
-
-            key = tuple(sorted((
-                vs[i],
-                vs[(i + 1) % len(vs)]
-            )))
-
-            counts[key] = (
-                counts.get(key, 0) + 1
+    by_id = defaultdict(list)
+    for name in seams:
+        match = _SEAM_NAME.fullmatch(name)
+        if match is None:
+            raise ValueError(f"Invalid SEAM id '{name}'; expected S001_TOP")
+        by_id[match.group("id")].append(name)
+    for seam_id, names in sorted(by_id.items()):
+        if len(names) != 2:
+            raise ValueError(
+                f"{seam_id} must define exactly two SEAM paths; got {', '.join(names)}"
             )
-
-    return counts
-
-
-edge_face_count = build_edge_face_count()
-
-
-# ============================================================
-# 获取 Vertex Group 顶点
-# ============================================================
-
-def group_vertex_set(name):
-
-    vg = obj.vertex_groups.get(name)
-
-    if vg is None:
-        raise RuntimeError(
-            f"找不到 Vertex Group：{name}"
-        )
-
-    gi = vg.index
-    out = set()
-
-    for v in mesh.vertices:
-
-        for g in v.groups:
-
-            if (
-                g.group == gi
-                and g.weight > 0.001
-            ):
-                out.add(v.index)
-                break
-
-    if not out:
-        raise RuntimeError(
-            f"{name} 是空的。"
-        )
-
-    return out
-
-
-def marker_world_center(name):
-    """Return a marker group's world-space centroid."""
-
-    indices = group_vertex_set(name)
-    center = sum((world_co(index) for index in indices), world_co(next(iter(indices))) * 0.0)
-    return center / len(indices)
-
-
-def orient_path_by_markers(path, path_name):
-    """Orient a semantic path from its explicit A marker toward B."""
-
-    marker_a_name, marker_b_name = endpoint_marker_names(path_name)
-    marker_a = marker_world_center(marker_a_name)
-    marker_b = marker_world_center(marker_b_name)
-
-    forward = (
-        (world_co(path[0]) - marker_a).length
-        + (world_co(path[-1]) - marker_b).length
-    )
-    reverse = (
-        (world_co(path[-1]) - marker_a).length
-        + (world_co(path[0]) - marker_b).length
-    )
-    return list(path) if forward <= reverse else list(reversed(path))
-
-
-# ============================================================
-# 从一个乱选的 Group 中提取所有连续 Boundary 段
-# ============================================================
-
-def extract_candidates(name):
-
-    group_verts = group_vertex_set(name)
-
-    # --------------------------------------------------------
-    # 只认可真正 Cloth Boundary
-    #
-    # Face Count = 1
-    # --------------------------------------------------------
-
-    adj = {}
-
-    for e in mesh.edges:
-
-        a, b = e.vertices
-
-        if (
-            a not in group_verts
-            or
-            b not in group_verts
-        ):
-            continue
-
-        key = tuple(sorted((a, b)))
-
-        if edge_face_count.get(key, 0) != 1:
-            continue
-
-        adj.setdefault(a, []).append(b)
-        adj.setdefault(b, []).append(a)
-
-
-    active = set(adj.keys())
-
-    # Group 中那些内部点 / 孤点
-    ignored_points = len(
-        group_verts - active
-    )
-
-
-    if len(active) < 2:
-
-        raise RuntimeError(
-            f"{name} 没有形成可用的 "
-            f"Cloth Boundary Edge。"
-        )
-
-
-    # ========================================================
-    # Connected Components
-    # ========================================================
-
-    unseen = set(active)
-    components = []
-
-    while unseen:
-
-        seed = next(iter(unseen))
-
-        stack = [seed]
-        comp = set()
-
-        while stack:
-
-            v = stack.pop()
-
-            if v in comp:
-                continue
-
-            comp.add(v)
-            unseen.discard(v)
-
-            for nb in adj.get(v, []):
-
-                if nb not in comp:
-                    stack.append(nb)
-
-        components.append(comp)
-
-
-    candidates = []
-    closed_components = 0
-
-
-    # ========================================================
-    # 每个 Component 拆成简单连续 Path
-    # ========================================================
-
-    for comp_id, comp in enumerate(components):
-
-        deg = {
-            v: len([
-                n for n in adj[v]
-                if n in comp
-            ])
-            for v in comp
-        }
-
-
-        # ----------------------------------------------------
-        # 整圈被选中
-        # ----------------------------------------------------
-
-        if all(
-            d == 2
-            for d in deg.values()
-        ):
-
-            closed_components += 1
-            continue
-
-
-        # ----------------------------------------------------
-        # degree != 2：
-        #
-        # endpoint
-        # branch
-        #
-        # 都作为拆分点
-        # ----------------------------------------------------
-
-        terminals = {
-            v
-            for v, d in deg.items()
-            if d != 2
-        }
-
-        visited = set()
-
-
-        for start in terminals:
-
-            for nb in adj[start]:
-
-                if nb not in comp:
-                    continue
-
-                edge_key = tuple(
-                    sorted((start, nb))
-                )
-
-                if edge_key in visited:
-                    continue
-
-
-                path = [start]
-
-                prev = start
-                cur = nb
-
-                visited.add(edge_key)
-
-                safety = 0
-
-
-                while True:
-
-                    path.append(cur)
-
-
-                    # 到达下一个 endpoint / branch
-                    if (
-                        cur in terminals
-                        and cur != start
-                    ):
-                        break
-
-
-                    nexts = []
-
-                    for nxt in adj[cur]:
-
-                        if (
-                            nxt == prev
-                            or
-                            nxt not in comp
-                        ):
-                            continue
-
-                        k = tuple(
-                            sorted((cur, nxt))
-                        )
-
-                        if k not in visited:
-                            nexts.append(nxt)
-
-
-                    if not nexts:
-                        break
-
-
-                    nxt = nexts[0]
-
-                    visited.add(
-                        tuple(
-                            sorted((cur, nxt))
-                        )
-                    )
-
-                    prev, cur = cur, nxt
-
-
-                    safety += 1
-
-                    if safety > len(comp) + 5:
-                        break
-
-
-                # ------------------------------------------------
-                # 有效 Path
-                # ------------------------------------------------
-
-                if len(path) >= 2:
-
-                    L = path_length(path)
-
-                    if L >= MIN_SEGMENT_LENGTH:
-
-                        candidates.append({
-                            "path": path,
-                            "length": L,
-                            "component": comp_id,
-                        })
-
-
-    if not candidates:
-
-        if closed_components:
-
+    for name in seams:
+        panel_name = f"PANEL_{_SEAM_NAME.fullmatch(name).group('panel')}"
+        if panel_name not in panels:
+            raise ValueError(f"{name} has no matching {panel_name} geometry in PANEL")
+    return panels, seams, hems, [(names[0], names[1]) for _, names in sorted(by_id.items())]
+
+
+def _boundary_data(mesh):
+    face_counts = defaultdict(int)
+    for polygon in mesh.polygons:
+        vertices = polygon.vertices
+        for index in range(len(vertices)):
+            face_counts[tuple(sorted((vertices[index], vertices[(index + 1) % len(vertices)])))] += 1
+    edges = [tuple(edge.vertices) for edge in mesh.edges if face_counts[tuple(sorted(edge.vertices))] == 1]
+    vertices = sorted({vertex for edge in edges for vertex in edge})
+    if not edges:
+        loose_count = sum(1 for count in face_counts.values() if count == 0)
+        if not mesh.polygons:
             raise RuntimeError(
-                f"{name} 只检测到完整闭合环。\n"
-                "脚本无法判断整圈中的哪一段"
-                "才是真正 Seam。\n"
-                "这种情况下至少需要大致选择"
-                "正确区域。"
+                f"活动 Mesh 没有面（vertices={len(mesh.vertices)}, edges={len(mesh.edges)}）；"
+                "它可能是 SVG 轮廓或 SEAM 线框。请选中 remesh.py 生成的 "
+                "*_CLOTH_* 三角网格。"
             )
-
         raise RuntimeError(
-            f"{name} 没有找到长度 >= "
-            f"{MIN_SEGMENT_LENGTH_MM:.1f} mm "
-            f"的连续边段。"
+            f"活动 Mesh 没有 Cloth Boundary Edge（faces={len(mesh.polygons)}, "
+            f"edges={len(mesh.edges)}, loose={loose_count}）。"
+            "网格可能已经封闭、应用了 Solidify，或边界存在重复面。"
         )
+    return edges, vertices
 
 
+def _bounds_2d(polylines):
+    points = [point for polyline in polylines for point in polyline]
     return (
-        candidates,
-        len(group_verts),
-        ignored_points,
-        closed_components
+        Vector((min(point.x for point in points), min(point.y for point in points))),
+        Vector((max(point.x for point in points), max(point.y for point in points))),
     )
 
 
-# ============================================================
-# 判断 SAME / REVERSE
-# ============================================================
+def _candidate_mappers(svg_bounds, mesh_bounds):
+    svg_low, svg_high = svg_bounds
+    mesh_low, mesh_high = mesh_bounds
+    svg_size = svg_high - svg_low
+    mesh_size = mesh_high - mesh_low
+    if min(svg_size) <= 0.0 or min(mesh_size) <= 0.0:
+        raise RuntimeError("SVG 或 Mesh 的二维包围盒尺寸无效。")
 
-def endpoint_pairing(ca, cb):
-
-    pa = ca["path"]
-    pb = cb["path"]
-
-    a0 = world_co(pa[0])
-    a1 = world_co(pa[-1])
-
-    b0 = world_co(pb[0])
-    b1 = world_co(pb[-1])
-
-
-    same = (
-        (a0 - b0).length
-        +
-        (a1 - b1).length
-    )
-
-
-    rev = (
-        (a0 - b1).length
-        +
-        (a1 - b0).length
-    )
+    for swap in (False, True):
+        source_size = Vector((svg_size.y, svg_size.x)) if swap else svg_size
+        scale = Vector((mesh_size.x / source_size.x, mesh_size.y / source_size.y))
+        for flip_x in (False, True):
+            for flip_y in (False, True):
+                def mapper(point, swap=swap, scale=scale.copy(), flip_x=flip_x, flip_y=flip_y):
+                    normalized = Vector((
+                        (point.x - svg_low.x) / svg_size.x,
+                        (point.y - svg_low.y) / svg_size.y,
+                    ))
+                    if swap:
+                        normalized = Vector((normalized.y, normalized.x))
+                    if flip_x:
+                        normalized.x = 1.0 - normalized.x
+                    if flip_y:
+                        normalized.y = 1.0 - normalized.y
+                    return mesh_low + Vector((normalized.x * mesh_size.x, normalized.y * mesh_size.y))
+                yield mapper
 
 
-    if rev < same:
+def _best_mapper(panel_paths, seam_paths, boundary_points, boundary_segments):
+    """Choose the SVG orientation using distance to the actual mesh boundary.
 
-        return (
-            list(reversed(pb)),
-            rev,
-            "REVERSE"
-        )
+    Measuring probes against boundary vertices produces a resolution-dependent
+    error: a point on the middle of a long boundary edge is reported as being
+    half an edge length away.  Measure against boundary segments instead so the
+    mapping error represents geometric misalignment rather than mesh density.
+    """
 
-    return (
-        list(pb),
-        same,
-        "SAME"
-    )
-
-
-# ============================================================
-# 自动从多个 Segment 中选最佳配对
-# ============================================================
-
-def choose_best_pair(
-    name_a,
-    name_b
-):
-
-    (
-        ca_list,
-        total_a,
-        ignored_a,
-        closed_a
-
-    ) = extract_candidates(name_a)
-
-
-    (
-        cb_list,
-        total_b,
-        ignored_b,
-        closed_b
-
-    ) = extract_candidates(name_b)
-
-
-    max_a = max(
-        c["length"]
-        for c in ca_list
-    )
-
-    max_b = max(
-        c["length"]
-        for c in cb_list
-    )
-
-
+    svg_bounds = _bounds_2d(panel_paths.values())
+    mesh_bounds = _bounds_2d([[point for point in boundary_points]])
+    probes = [point for path in seam_paths.values() for point in path]
     best = None
-
-
-    for ca in ca_list:
-
-        for cb in cb_list:
-
-
-            (
-                oriented_b,
-                end_dist,
-                direction
-
-            ) = endpoint_pairing(
-                ca,
-                cb
+    for mapper in _candidate_mappers(svg_bounds, mesh_bounds):
+        error = sum(
+            min(
+                _distance_to_segment(mapper(point), start, end)
+                for start, end in boundary_segments
             )
-
-
-            la = ca["length"]
-            lb = cb["length"]
-
-
-            avg = max(
-                (la + lb) * 0.5,
-                1e-9
-            )
-
-
-            # ------------------------------------------------
-            # 两条边长度差
-            # ------------------------------------------------
-
-            length_diff = (
-                abs(la - lb)
-                /
-                max(la, lb)
-            )
-
-
-            # ------------------------------------------------
-            # Endpoint 距离归一化
-            # ------------------------------------------------
-
-            endpoint_norm = (
-                end_dist / avg
-            )
-
-
-            # ------------------------------------------------
-            # 更倾向于长 Segment
-            #
-            # 防止选中旁边一小截恰好很近的误选边
-            # ------------------------------------------------
-
-            size_bonus = min(
-                la / max_a
-                if max_a else 0,
-
-                lb / max_b
-                if max_b else 0
-            )
-
-
-            # ------------------------------------------------
-            # 综合评分
-            #
-            # 越低越好
-            # ------------------------------------------------
-
-            score = (
-                endpoint_norm
-                +
-                3.0 * length_diff
-                -
-                0.75 * size_bonus
-            )
-
-
-            item = {
-
-                "score": score,
-
-                "path_a": ca["path"],
-                "path_b": oriented_b,
-
-                "len_a": la,
-                "len_b": lb,
-
-                "direction": direction,
-
-                "total_a": total_a,
-                "total_b": total_b,
-
-                "ignored_a": ignored_a,
-                "ignored_b": ignored_b,
-
-                "count_a": len(ca_list),
-                "count_b": len(cb_list),
-
-                "closed_a": closed_a,
-                "closed_b": closed_b,
-            }
-
-
-            if (
-                best is None
-                or
-                score < best["score"]
-            ):
-                best = item
-
-
-    # Semantic seams use Illustrator A/B markers as the authority. Spatial
-    # endpoint comparison remains only for explicitly configured legacy data.
-    if parse_seam_name(name_a) and parse_seam_name(name_b):
-        best["path_a"] = orient_path_by_markers(best["path_a"], name_a)
-        best["path_b"] = orient_path_by_markers(best["path_b"], name_b)
-        best["direction"] = "MARK_A_TO_B"
-
+            for point in probes
+        ) / len(probes)
+        if best is None or error < best[0]:
+            best = (error, mapper)
     return best
 
 
-# ============================================================
-# 自动清理 Vertex Group
-# ============================================================
-
-def clean_vertex_group(
-    name,
-    keep_path
-):
-
-    vg = obj.vertex_groups.get(name)
-
-    old = list(
-        group_vertex_set(name)
-    )
-
-    keep = list(
-        dict.fromkeys(keep_path)
-    )
+def _inside_polygon(point, polygon):
+    inside = False
+    previous = polygon[-1]
+    for current in polygon:
+        crosses = (current.y > point.y) != (previous.y > point.y)
+        if crosses:
+            crossing_x = (
+                (previous.x - current.x) * (point.y - current.y)
+                / (previous.y - current.y) + current.x
+            )
+            if point.x < crossing_x:
+                inside = not inside
+        previous = current
+    return inside
 
 
-    if CLEAN_VERTEX_GROUPS:
-
-        if old:
-            vg.remove(old)
-
-        vg.add(
-            keep,
-            1.0,
-            'REPLACE'
-        )
+def _replace_group(obj, name, indices):
+    old = obj.vertex_groups.get(name)
+    if old is not None:
+        obj.vertex_groups.remove(old)
+    group = obj.vertex_groups.new(name=name)
+    group.add(list(indices), 1.0, "REPLACE")
 
 
-    return (
-        len(old),
-        len(keep)
-    )
+def _is_flat_panel_mesh(obj):
+    if obj.type != "MESH" or not obj.data.vertices or not obj.data.polygons:
+        return False
+    z_values = [vertex.co.z for vertex in obj.data.vertices]
+    local_thickness = max(z_values) - min(z_values)
+    scale_z = abs(obj.matrix_world.to_scale().z)
+    return local_thickness * scale_z <= FLAT_PANEL_TOLERANCE_MM / 1000.0
 
 
-# ============================================================
-# Path 累计弧长
-# ============================================================
+def _prepare_active_mesh(context):
+    """Enter Object Mode and join the selected flat panel Mesh objects."""
 
-def cumulative_t(path):
+    active = context.active_object
+    if active is None:
+        raise RuntimeError("没有活动对象；请选择平面版片 Mesh。")
 
-    acc = [0.0]
+    if active.mode != "OBJECT":
+        try:
+            bpy.ops.object.mode_set(mode="OBJECT")
+        except RuntimeError as error:
+            raise RuntimeError(
+                f"无法从 {active.mode} 切换到 Object Mode：{error}"
+            ) from error
 
-    total = 0.0
-
-
-    for i in range(1, len(path)):
-
-        total += (
-            world_co(path[i])
-            -
-            world_co(path[i - 1])
-        ).length
-
-        acc.append(total)
-
-
-    if total <= 1e-12:
-
-        raise RuntimeError(
-            "Seam 长度为 0。"
-        )
-
-
-    return [
-        x / total
-        for x in acc
-    ]
-
-
-# ============================================================
-# 按弧长均匀选择 K 个顶点
-# ============================================================
-
-def choose_k_vertices(
-    path,
-    k
-):
-
-    if k >= len(path):
-        return list(path)
-
-
-    ts = cumulative_t(path)
-
-    n = len(path)
-
-    out = []
-
-    prev_idx = -1
-
-
-    for j in range(k):
-
-
-        if j == 0:
-
-            idx = 0
-
-
-        elif j == k - 1:
-
-            idx = n - 1
-
-
+    selected_meshes = [obj for obj in context.selected_objects if _is_flat_panel_mesh(obj)]
+    if not _is_flat_panel_mesh(active):
+        if selected_meshes:
+            active = selected_meshes[0]
+            context.view_layer.objects.active = active
+            print(f"活动对象不是 Cloth 面网格，自动改用: {active.name}")
+        elif active.type == "MESH" and not active.data.polygons:
+            raise RuntimeError(
+                f"活动 Mesh '{active.name}' 没有面；请选择 remesh.py 生成的 "
+                "*_CLOTH_* 三角网格，而不是 SVG 轮廓线。"
+            )
+        elif active.type != "MESH":
+            raise RuntimeError(
+                f"活动对象类型为 {active.type}；请选择 remesh 后的 Mesh。"
+            )
         else:
-
-            target = (
-                j / (k - 1)
+            raise RuntimeError(
+                f"活动 Mesh '{active.name}' 不是平面 XY 版片；局部 Z 厚度必须不超过 "
+                f"{FLAT_PANEL_TOLERANCE_MM:g} mm。"
             )
 
-
-            pos = bisect.bisect_left(
-                ts,
-                target
-            )
-
-
-            min_i = (
-                prev_idx + 1
-            )
-
-
-            remaining = (
-                (k - 1) - j
-            )
-
-
-            max_i = (
-                n - 1 - remaining
-            )
-
-
-            cand = []
-
-
-            if 0 <= pos < n:
-                cand.append(pos)
-
-
-            if 0 <= pos - 1 < n:
-                cand.append(pos - 1)
-
-
-            cand = [
-                i
-                for i in cand
-                if min_i <= i <= max_i
-            ]
-
-
-            if cand:
-
-                idx = min(
-                    cand,
-                    key=lambda i:
-                    abs(
-                        ts[i] - target
-                    )
-                )
-
-            else:
-
-                idx = max(
-                    min_i,
-                    min(
-                        max_i,
-                        pos
-                    )
-                )
-
-
-        out.append(
-            path[idx]
-        )
-
-        prev_idx = idx
-
-
-    return out
-
-
-# ============================================================
-# 开始自动匹配
-# ============================================================
-
-spring_pairs = []
-
-
-print("")
-print("========================================")
-print("ROBUST AUTO SEWING")
-print("========================================")
-
-
-for (
-    name_a,
-    name_b
-
-) in SEAM_PAIRS:
-
-
-    best = choose_best_pair(
-        name_a,
-        name_b
-    )
-
-    length_difference_ratio = (
-        abs(best["len_a"] - best["len_b"])
-        / max(best["len_a"], best["len_b"])
-    )
-    reject_ratio = float(SEWING_CONFIG["length_difference_reject_ratio"])
-    warning_ratio = float(SEWING_CONFIG["length_difference_warning_ratio"])
-
-    if length_difference_ratio > reject_ratio:
-        raise RuntimeError(
-            f"{name_a} <-> {name_b} 缝边长度差 "
-            f"{length_difference_ratio:.1%}，超过拒绝阈值 {reject_ratio:.1%}。"
-        )
-    if length_difference_ratio > warning_ratio:
-        print(
-            f"[Warning] {name_a} <-> {name_b} 缝边长度差 "
-            f"{length_difference_ratio:.1%}。"
-        )
-
-
-    old_a, new_a = (
-        clean_vertex_group(
-            name_a,
-            best["path_a"]
-        )
-    )
-
-
-    old_b, new_b = (
-        clean_vertex_group(
-            name_b,
-            best["path_b"]
-        )
-    )
-
-
-    print("")
-    print(
-        f"{name_a}"
-        f"  <->  "
-        f"{name_b}"
-    )
-
-
-    print(
-        f"  candidate segments: "
-        f"{best['count_a']} "
-        f"<-> "
-        f"{best['count_b']}"
-    )
-
-
-    print(
-        f"  chosen vertices: "
-        f"{new_a} "
-        f"<-> "
-        f"{new_b}"
-    )
-
-
-    print(
-        f"  removed bad group verts: "
-        f"{old_a - new_a} "
-        f"<-> "
-        f"{old_b - new_b}"
-    )
-
-
-    print(
-        f"  ignored inner/isolated points: "
-        f"{best['ignored_a']} "
-        f"<-> "
-        f"{best['ignored_b']}"
-    )
-
-
-    print(
-        f"  length: "
-        f"{best['len_a'] * 1000:.1f} mm "
-        f"<-> "
-        f"{best['len_b'] * 1000:.1f} mm"
-    )
-
-
-    print(
-        f"  direction: "
-        f"{best['direction']}"
-    )
-
-
-    print(
-        f"  score: "
-        f"{best['score']:.4f}"
-    )
-
-
-    # ========================================================
-    # 用较少顶点的一侧决定 Sewing 数量
-    # ========================================================
-
-    k = min(
-        len(best["path_a"]),
-        len(best["path_b"])
-    )
-
-
-    sa = choose_k_vertices(
-        best["path_a"],
-        k
-    )
-
-
-    sb = choose_k_vertices(
-        best["path_b"],
-        k
-    )
-
-
-    for a, b in zip(sa, sb):
-
-        if a != b:
-
-            spring_pairs.append(
-                (a, b)
-            )
-
-
-# Deduplicate connectors that may be repeated by overlapping semantic groups.
-unique_pairs = []
-seen_pairs = set()
-for index_a, index_b in spring_pairs:
-    key = tuple(sorted((index_a, index_b)))
-    if key in seen_pairs:
-        continue
-    seen_pairs.add(key)
-    unique_pairs.append((index_a, index_b))
-spring_pairs = unique_pairs
-
-connector_degree = {}
-for index_a, index_b in spring_pairs:
-    connector_degree[index_a] = connector_degree.get(index_a, 0) + 1
-    connector_degree[index_b] = connector_degree.get(index_b, 0) + 1
-hub_vertices = sorted(
-    (vertex_index, degree)
-    for vertex_index, degree in connector_degree.items()
-    if degree > MAX_SEWING_CONNECTORS_PER_VERTEX
-)
-obj["sewing_spring_hub_vertex_count"] = len(hub_vertices)
-if hub_vertices:
-    preview = ", ".join(
-        f"v{vertex_index}:degree{degree}"
-        for vertex_index, degree in hub_vertices[:12]
-    )
-    raise RuntimeError(
-        "Sewing pairing would create black-hole hubs: "
-        f"{preview}. Each vertex may receive at most "
-        f"{MAX_SEWING_CONNECTORS_PER_VERTEX} connectors. Check overlapping "
-        "seam groups and A/B endpoint markers."
-    )
-
-
-# ============================================================
-# 创建 Loose Edge / Sewing Spring
-# ============================================================
-
-initial_distances = [
-    (world_co(index_a) - world_co(index_b)).length * 1000.0
-    for index_a, index_b in spring_pairs
-]
-
-if not initial_distances:
-    raise RuntimeError("没有生成任何 Sewing Spring 配对。")
-
-maximum_initial_distance_mm = max(initial_distances)
-configured_maximum_mm = float(SEWING_CONFIG["maximum_initial_distance_mm"])
-preferred_maximum_mm = float(SEWING_CONFIG["preferred_initial_distance_mm"][1])
-
-if maximum_initial_distance_mm > configured_maximum_mm:
-    raise RuntimeError(
-        f"Sewing Spring 最大初始距离 {maximum_initial_distance_mm:.1f} mm，"
-        f"超过安全上限 {configured_maximum_mm:.1f} mm；请先重新 Arrangement。"
-    )
-if maximum_initial_distance_mm > preferred_maximum_mm:
-    print(
-        f"[Warning] Sewing Spring 最大初始距离 "
-        f"{maximum_initial_distance_mm:.1f} mm，建议先优化 Arrangement。"
-    )
-
-bm = bmesh.new()
-
-bm.from_mesh(mesh)
-
-bm.verts.ensure_lookup_table()
-
-
-created = 0
-skipped = 0
-
-
-for ia, ib in spring_pairs:
-
-    va = bm.verts[ia]
-    vb = bm.verts[ib]
-
-
+    if active not in selected_meshes:
+        active.select_set(True)
+        selected_meshes.append(active)
+
+    if len(selected_meshes) > 1:
+        # Join only Mesh panels. Selected cameras, empties or SVG guide curves
+        # must not participate in the operation.
+        for selected in list(context.selected_objects):
+            selected.select_set(selected in selected_meshes)
+        context.view_layer.objects.active = active
+        names = [obj.name for obj in selected_meshes]
+        result = bpy.ops.object.join()
+        if result != {"FINISHED"}:
+            raise RuntimeError("自动合并所选版片 Mesh 失败。")
+        active = context.active_object
+        print(f"自动合并 {len(names)} 个版片 Mesh: {', '.join(names)}")
+
+    if active is None or active.type != "MESH" or active.mode != "OBJECT":
+        raise RuntimeError("未能准备有效的 Object Mode Cloth Mesh。")
+    return active
+
+
+def _ordered_boundary_path(group_indices, boundary_edges):
+    selected = set(group_indices)
+    adjacency = defaultdict(list)
+    for start, end in boundary_edges:
+        if start in selected and end in selected:
+            adjacency[start].append(end)
+            adjacency[end].append(start)
+    active = set(adjacency)
+    terminals = [index for index in active if len(adjacency[index]) == 1]
+    if len(terminals) != 2 or any(len(adjacency[index]) > 2 for index in active):
+        raise RuntimeError("Seam 顶点组没有形成一条开放、无分支的 Boundary Path。")
+    path = [terminals[0]]
+    previous = None
+    current = terminals[0]
+    while True:
+        following = [index for index in adjacency[current] if index != previous]
+        if not following:
+            break
+        previous, current = current, following[0]
+        path.append(current)
+    if set(path) != active:
+        raise RuntimeError("Seam 顶点组包含不连续的 Boundary 段。")
+    return path
+
+
+def _orient_semantic_path(path, name, coordinates, mapped_path):
+    """Apply the project direction rule before creating automatic A/B groups."""
+
+    parsed = _SEAM_NAME.fullmatch(name)
+    if parsed and parsed.group("panel") == "TOP" and TOP_SEAMS_LEFT_TO_RIGHT:
+        # TOP is authoritative in Blender local XY: A is always the endpoint
+        # with the smaller local X and B is always the endpoint to its right.
+        if coordinates[path[0]].x > coordinates[path[-1]].x:
+            path.reverse()
+        return path
+
+    start_target = mapped_path[0]
     if (
-        bm.edges.get((va, vb))
-        is not None
-    ):
+        Vector((coordinates[path[-1]].x, coordinates[path[-1]].y)) - start_target
+    ).length < (
+        Vector((coordinates[path[0]].x, coordinates[path[0]].y)) - start_target
+    ).length:
+        path.reverse()
+    return path
 
-        skipped += 1
-        continue
+
+def _cumulative_lengths(path, coordinates):
+    values = [0.0]
+    for index in range(1, len(path)):
+        values.append(values[-1] + (coordinates[path[index]] - coordinates[path[index - 1]]).length)
+    return values
 
 
-    try:
+def _sample_path(path, coordinates, count):
+    cumulative = _cumulative_lengths(path, coordinates)
+    total = cumulative[-1]
+    if total <= 0.0:
+        raise RuntimeError("Seam Path 长度为零。")
+    result = []
+    for sample in range(count):
+        target = total * sample / (count - 1)
+        nearest = min(range(len(path)), key=lambda index: abs(cumulative[index] - target))
+        if not result or result[-1] != path[nearest]:
+            result.append(path[nearest])
+    return result, total
 
-        bm.edges.new(
-            (va, vb)
+
+def build_semantic_sewing(obj, filepath):
+    if obj is None or obj.type != "MESH" or obj.mode != "OBJECT":
+        raise RuntimeError("请在 Object Mode 激活已合并的平面 Cloth Mesh。")
+
+    panels, seams, hems, seam_pairs = _semantic_svg(filepath)
+    mesh = obj.data
+    boundary_edges, boundary_indices = _boundary_data(mesh)
+    coordinates = {vertex.index: vertex.co.copy() for vertex in mesh.vertices}
+    boundary_points = [Vector((coordinates[index].x, coordinates[index].y)) for index in boundary_indices]
+    boundary_segments = [
+        (
+            Vector((coordinates[start].x, coordinates[start].y)),
+            Vector((coordinates[end].x, coordinates[end].y)),
+        )
+        for start, end in boundary_edges
+    ]
+    edge_lengths = sorted(
+        (coordinates[start] - coordinates[end]).length for start, end in boundary_edges
+    )
+    median_edge = edge_lengths[len(edge_lengths) // 2]
+    tolerance = max(median_edge * MAPPING_TOLERANCE_FACTOR, 1.0e-6)
+
+    semantic_edges = dict(seams)
+    semantic_edges.update(hems)
+    mapping_error, mapper = _best_mapper(
+        panels, semantic_edges, boundary_points, boundary_segments
+    )
+    if mapping_error > tolerance * MAX_MAPPING_ERROR_FACTOR:
+        raise RuntimeError(
+            f"SVG→Mesh 平均映射误差 {mapping_error * 1000.0:.1f} mm 过大；"
+            "请在裁片仍为平面且布局未改变时运行。"
         )
 
-        created += 1
+    for name, svg_path in panels.items():
+        mapped_path = [mapper(point) for point in svg_path]
+        selected = {
+            vertex.index for vertex in mesh.vertices
+            if _inside_polygon(Vector((vertex.co.x, vertex.co.y)), mapped_path)
+            or _distance_to_polyline(Vector((vertex.co.x, vertex.co.y)), mapped_path) <= tolerance
+        }
+        if not selected:
+            raise RuntimeError(f"{name} 没有映射到 Mesh 顶点。")
+        _replace_group(obj, name, selected)
+
+    mapped_boundary_groups = {}
+    for name, svg_path in semantic_edges.items():
+        mapped_path = [mapper(point) for point in svg_path]
+        selected = {
+            index for index in boundary_indices
+            if _distance_to_polyline(
+                Vector((coordinates[index].x, coordinates[index].y)), mapped_path
+            ) <= tolerance
+        }
+        if len(selected) < 2:
+            raise RuntimeError(f"{name} 只映射到 {len(selected)} 个边界顶点。")
+        _replace_group(obj, name, selected)
+        path = _ordered_boundary_path(selected, boundary_edges)
+        mapped_boundary_groups[name] = path
+        if name not in seams:
+            continue
+        _orient_semantic_path(path, name, coordinates, mapped_path)
+        _replace_group(obj, f"{name}_A", [path[0]])
+        _replace_group(obj, f"{name}_B", [path[-1]])
+
+    if DELETE_EXISTING_LOOSE_EDGES:
+        bm = bmesh.new()
+        bm.from_mesh(mesh)
+        loose = [edge for edge in bm.edges if not edge.link_faces]
+        if loose:
+            bmesh.ops.delete(bm, geom=loose, context="EDGES")
+        bm.to_mesh(mesh)
+        bm.free()
+
+    connectors = []
+    degree = defaultdict(int)
+    for name_a, name_b in seam_pairs:
+        path_a = mapped_boundary_groups[name_a]
+        path_b = mapped_boundary_groups[name_b]
+        count = max(2, min(len(path_a), len(path_b)))
+        sampled_a, length_a = _sample_path(path_a, coordinates, count)
+        sampled_b, length_b = _sample_path(path_b, coordinates, count)
+        difference = abs(length_a - length_b) / max(length_a, length_b)
+        if difference > MAX_LENGTH_DIFFERENCE_RATIO:
+            raise RuntimeError(
+                f"{name_a} ↔ {name_b} 长度差 {difference:.1%} 超过 "
+                f"{MAX_LENGTH_DIFFERENCE_RATIO:.0%}。"
+            )
+        pair_count = min(len(sampled_a), len(sampled_b))
+        for index_a, index_b in zip(sampled_a[:pair_count], sampled_b[:pair_count]):
+            if index_a == index_b:
+                continue
+            degree[index_a] += 1
+            degree[index_b] += 1
+            if max(degree[index_a], degree[index_b]) > MAX_SEWING_CONNECTORS_PER_VERTEX:
+                raise RuntimeError("Sewing 配对会产生多对一汇聚点，已停止。")
+            connectors.append(tuple(sorted((index_a, index_b))))
+
+    connectors = sorted(set(connectors))
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    bm.verts.ensure_lookup_table()
+    existing = {tuple(sorted((edge.verts[0].index, edge.verts[1].index))) for edge in bm.edges}
+    for start, end in connectors:
+        if (start, end) not in existing:
+            bm.edges.new((bm.verts[start], bm.verts[end]))
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.update()
+    obj["semantic_sewing_svg"] = filepath
+    obj["semantic_sewing_edges"] = len(connectors)
+    print(
+        f"Semantic Sewing: svg={filepath}, panel_groups={len(panels)}, "
+        f"seam_groups={len(seams)}, hem_groups={len(hems)}, "
+        f"pairs={len(seam_pairs)}, loose_edges={len(connectors)}, "
+        f"mapping_error={mapping_error * 1000.0:.2f} mm"
+    )
+    return len(connectors)
 
 
-    except ValueError:
+class CC_OT_generate_semantic_sewing(bpy.types.Operator, ImportHelper):
+    """从语义 SVG 创建缝合顶点组与 Sewing Loose Edge"""
 
-        skipped += 1
+    bl_idname = "cc.generate_semantic_sewing"
+    bl_label = "从语义 SVG 生成 Sewing"
+    bl_options = {"REGISTER", "UNDO"}
+    filename_ext = ".svg"
+    filter_glob: bpy.props.StringProperty(default="*.svg", options={"HIDDEN"})
+
+    def execute(self, context):
+        try:
+            cloth = _prepare_active_mesh(context)
+            count = build_semantic_sewing(cloth, self.filepath)
+        except (ET.ParseError, OSError, RuntimeError, ValueError) as error:
+            self.report({"ERROR"}, str(error))
+            return {"CANCELLED"}
+        self.report({"INFO"}, f"已生成 {count} 条 Sewing Loose Edge")
+        return {"FINISHED"}
 
 
-bm.to_mesh(mesh)
-bm.free()
+def launch_svg_dialog():
+    previous = getattr(bpy.types, CC_OT_generate_semantic_sewing.__name__, None)
+    if previous is not None:
+        try:
+            bpy.utils.unregister_class(previous)
+        except RuntimeError:
+            pass
+    bpy.utils.register_class(CC_OT_generate_semantic_sewing)
+    if bpy.app.background:
+        raise RuntimeError("后台模式请直接调用 build_semantic_sewing(obj, svg_filepath)。")
+    return bpy.ops.cc.generate_semantic_sewing("INVOKE_DEFAULT")
 
-mesh.update()
 
-
-obj[
-    "sewing_springs_created"
-] = created
-
-
-print("")
-print("========================================")
-print(
-    f"Created Sewing Springs: "
-    f"{created}"
-)
-print(
-    f"Skipped: "
-    f"{skipped}"
-)
-print("========================================")
+if __name__ == "__main__":
+    launch_svg_dialog()

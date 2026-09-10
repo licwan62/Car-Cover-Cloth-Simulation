@@ -18,7 +18,7 @@ class MirrorMarkerTests(unittest.TestCase):
         self.assertIn(markers["front_axis"], {"+X", "-X", "+Y", "-Y"})
 
     def test_standalone_has_no_project_dependency(self):
-        source = (ROOT / "scripts" / "blender" / "setup_mirror_markers_standalone.py").read_text(
+        source = (ROOT / "scripts" / "blender" / "setup_mirror_markers.py").read_text(
             encoding="utf-8"
         )
         self.assertNotIn("project_config", source)
@@ -28,7 +28,7 @@ class MirrorMarkerTests(unittest.TestCase):
         self.assertIn("launch_marker_dialog", source)
 
     def test_marks_do_not_add_physics_or_geometry_modifiers(self):
-        source = (ROOT / "scripts" / "blender" / "setup_mirror_markers_standalone.py").read_text(
+        source = (ROOT / "scripts" / "blender" / "setup_mirror_markers.py").read_text(
             encoding="utf-8"
         )
         self.assertNotIn("modifiers.new", source)

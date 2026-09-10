@@ -1,19 +1,26 @@
 """Convert horizontal TOP/LEFT/RIGHT panel patterns to a semantic sewing SVG.
 
 Run with an input path and optional -o output.svg; without arguments opens a
-file picker. Only Python's standard library is needed. Original inputs are
+file picker. AI input requires Windows and installed Adobe Illustrator;
+SVG input only needs Python's standard library. Original inputs are
 never overwritten. Geometry is split, not fitted to a different car template.
 """
 
 import argparse
+import json
 from pathlib import Path
 import re
+import shutil
+import subprocess
+import tempfile
 import xml.etree.ElementTree as ET
 
 
 SVG = "http://www.w3.org/2000/svg"
 TOKEN = re.compile(r"[A-Za-z]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?")
 EPS = 1e-6
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+OUTPUT_DIR = PROJECT_ROOT / "output" / "sewing_svg"
 
 
 def near(a, b):
@@ -247,14 +254,61 @@ def convert_tree(root, front="right"):
     return output
 
 
+def read_ai(source):
+    """Read native Illustrator layers, including hidden paths absent from PDF.
+
+    Windows Illustrator is driven through PowerShell COM; no pywin32 required.
+    Open a temporary copy so existing documents and the source stay untouched.
+    """
+    if __import__("sys").platform != "win32":
+        raise ValueError("AI input requires Windows with Adobe Illustrator installed")
+    with tempfile.TemporaryDirectory(prefix="sewing_ai_") as directory:
+        directory = Path(directory)
+        copy = directory / source.name
+        shutil.copy2(source, copy)
+        result = directory / "panels.svg"
+        script = Path(__file__).with_name("read_panel.jsx").read_text(encoding="utf-8")
+        script = script.replace("__SOURCE__", json.dumps(copy.as_posix(), ensure_ascii=True))
+        script = script.replace("__OUTPUT__", json.dumps(result.as_posix(), ensure_ascii=True))
+        jsx = directory / "read.jsx"
+        jsx.write_text(script, encoding="utf-8")
+        # Pass paths as literal PowerShell strings, never interpolate shell code.
+        literal = str(jsx).replace("'", "''")
+        command = ("$ErrorActionPreference='Stop'; "
+                   "$ai=New-Object -ComObject Illustrator.Application; "
+                   f"$message=$ai.DoJavaScriptFile('{literal}'); "
+                   "if($message -ne 'OK'){throw $message}")
+        process = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
+            capture_output=True,
+        )
+        if process.returncode or not result.exists():
+            detail = (process.stderr or process.stdout).decode(errors="replace").strip()
+            raise ValueError(f"Illustrator PANEL extraction failed: {detail}")
+        return ET.parse(result).getroot()
+
+
+def default_output(source):
+    source = Path(source).resolve()
+    try:
+        parent = source.parent.relative_to(PROJECT_ROOT / "illustrator")
+    except ValueError:
+        parent = Path()
+    return OUTPUT_DIR / parent / (source.stem + "_sewing.svg")
+
+
 def convert_file(source, destination=None, front="right"):
     source = Path(source)
-    destination = Path(destination) if destination else source.with_name(source.stem + "_sewing.svg")
+    destination = Path(destination) if destination else default_output(source)
     if source.resolve() == destination.resolve():
         raise ValueError("Output must differ from the original input")
-    output = convert_tree(ET.parse(source).getroot(), front)
+    if destination.exists():
+        raise FileExistsError(f"Output already exists: {destination}")
+    root = read_ai(source) if source.suffix.lower() == ".ai" else ET.parse(source).getroot()
+    output = convert_tree(root, front)
     ET.register_namespace("", SVG)
     ET.indent(output, space="  ")
+    destination.parent.mkdir(parents=True, exist_ok=True)
     # Exclusive creation prevents silently replacing an existing semantic file.
     with destination.open("xb") as stream:
         ET.ElementTree(output).write(stream, encoding="utf-8", xml_declaration=True)
@@ -263,7 +317,7 @@ def convert_file(source, destination=None, front="right"):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("input", nargs="?", help="PANEL-only SVG")
+    parser.add_argument("input", nargs="*", help="AI/SVG files or directories (recursive AI batch)")
     parser.add_argument("-o", "--output")
     parser.add_argument("--front", choices=("left", "right"), default="right",
                         help="Car front in the flat SVG (default: right, as in Tesla reference)")
@@ -272,15 +326,40 @@ def main():
         from tkinter import Tk, filedialog
         window = Tk()
         window.withdraw()
-        args.input = filedialog.askopenfilename(title="选择仅含 PANEL 的 SVG", filetypes=[("SVG", "*.svg")])
+        selected = filedialog.askopenfilename(title="选择 AI 工程或 PANEL SVG", filetypes=[("Illustrator / SVG", "*.ai *.svg")])
+        args.input = [selected] if selected else []
         window.destroy()
         if not args.input:
             return
-    try:
-        output = convert_file(args.input, args.output, args.front)
-    except (ValueError, OSError, ET.ParseError) as error:
-        parser.exit(1, f"Conversion failed: {error}\n")
-    print(f"Created {output}: 3 PANEL, 4 SEAM (2 pairs), 4 HEM")
+    sources = []
+    for value in args.input:
+        path = Path(value)
+        sources.extend(sorted(p for p in path.rglob("*") if p.suffix.lower() == ".ai")
+                       if path.is_dir() else [path])
+    sources = list(dict.fromkeys(p.resolve() for p in sources))
+    if not sources:
+        parser.exit(1, "No AI files found\n")
+    if args.output and len(sources) != 1:
+        parser.error("--output requires exactly one input file")
+    results = []
+    for source in sources:
+        try:
+            output = convert_file(source, args.output, args.front)
+        except (ValueError, OSError, ET.ParseError) as error:
+            results.append(dict(source=str(source), status="failed", error=str(error)))
+            print(f"FAILED {source.name}: {error}", flush=True)
+        else:
+            results.append(dict(source=str(source), status="created", output=str(output)))
+            print(f"Created {output}: 3 PANEL, 4 SEAM (2 pairs), 4 HEM", flush=True)
+    if len(sources) > 1:
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        report = OUTPUT_DIR / "batch_report.json"
+        report.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"Report: {report}")
+    failed = sum(r["status"] == "failed" for r in results)
+    print(f"Created {len(results)-failed}/{len(results)}; failed {failed}")
+    if failed:
+        parser.exit(1)
 
 
 if __name__ == "__main__":

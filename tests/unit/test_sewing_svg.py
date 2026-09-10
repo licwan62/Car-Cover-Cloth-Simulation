@@ -1,6 +1,7 @@
 import ast
 from collections import defaultdict
 import importlib.util
+import os
 from pathlib import Path
 import re
 import tempfile
@@ -36,10 +37,35 @@ class Vector(list):
 
 
 class SewingSVGTests(unittest.TestCase):
+    def test_default_output_preserves_illustrator_subdirectory(self):
+        self.assertEqual(svg.default_output(ROOT / "illustrator/皮卡/PK-L_0814.ai"),
+                         ROOT / "output/sewing_svg/皮卡/PK-L_0814_sewing.svg")
+        self.assertEqual(svg.default_output(ROOT / "sample.svg"),
+                         ROOT / "output/sewing_svg/sample_sewing.svg")
+
+    @unittest.skipUnless(os.environ.get("TEST_ILLUSTRATOR") == "1",
+                         "Requires Windows Illustrator; set TEST_ILLUSTRATOR=1")
+    def test_native_ai_hidden_panel_and_large_canvas(self):
+        source = ROOT / "illustrator/皮卡/PK-L_0814.ai"
+        before = source.read_bytes()
+        with tempfile.TemporaryDirectory() as directory:
+            output = svg.convert_file(source, Path(directory) / "output.svg")
+            root = ET.parse(output).getroot()
+            self.assertEqual([g.get("id") for g in root], ["PANEL", "SEAM", "HEM"])
+            self.assertEqual([len(g) for g in root], [3, 4, 4])
+            self.assertEqual({p.get("id") for p in root[0]},
+                             {"PANEL_TOP", "PANEL_LEFT", "PANEL_RIGHT"})
+            width = float(root.get("width").removesuffix("pt"))
+            self.assertAlmostEqual(width / float(root.get("viewBox").split()[2]), 10)
+            for panel in root[0]:
+                self.assertTrue(svg.contour(panel))
+            self.assertTrue(any("C" in p.get("d") for p in root[1]))
+        self.assertEqual(source.read_bytes(), before)
+
     def test_dodge_output_is_readable_by_actual_sewing_parser(self):
         source = ROOT / "scripts/illustrator/SVG/Dodge Challenger 495-125 (+12).svg"
         before = source.read_bytes()
-        tree = ast.parse((ROOT / "scripts/blender/generate_sewing_standalone.py").read_text(encoding="utf-8"))
+        tree = ast.parse((ROOT / "scripts/blender/generate_sewing.py").read_text(encoding="utf-8"))
         names = {"_local_name", "_cubic", "_flatten_path", "_element_polyline", "_semantic_svg"}
         nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in names
                  or isinstance(n, ast.Assign) and isinstance(n.targets[0], ast.Name)

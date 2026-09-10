@@ -8,6 +8,7 @@
 config/                 可版本化的布料、模拟和 Fit 阈值
 illustrator/            AI 母版与 SVG/JSON 导出
 blender/                车辆和模拟场景（不存放脚本）
+scripts/blender/config_driven/  JSON-driven workflows and helpers
 scripts/blender/        Blender 自动化模块
 scripts/illustrator/    Illustrator 自动化模块
 output/                 模拟、报告和调试产物
@@ -19,8 +20,8 @@ doc/AGENT.md            完整设计依据
 
 建议按以下顺序从 Blender 的 Scripting 工作区执行：
 
-1. `repair_boundary.py`：修复 SVG 转 Mesh 后的开放边界。
-2. `generate_cloth_mesh.py`：生成约 50 mm 的约束 Delaunay Cloth Mesh。
+1. `config_driven/repair_boundary.py`：修复 SVG 转 Mesh 后的开放边界。
+2. `config_driven/generate_cloth_mesh.py`：生成约 50 mm 的约束 Delaunay Cloth Mesh。
 3. `generate_sewing.py`：按语义 Sewing ID 配对并生成 Loose Edge。
 4. `setup_cloth.py`：应用 `Oxford_210D_SmoothDrape_V2` 配置。
 5. `export_three_views.py`：导出真实尺寸三视图报告（辅助工具）。
@@ -36,7 +37,7 @@ doc/AGENT.md            完整设计依据
 
 `SmoothDrape_V2` 针对 50 mm 三角网格减少细密碎褶：降低面内压缩/剪切刚度，提高弯曲阻尼，并启用仅影响显示法线的 Shade Smooth。重新应用预设后必须删除旧 Cloth Bake 再模拟。
 
-如果需要把脚本直接保存在 `.blend` 的 Text block 中，请使用 `scripts/blender/setup_cloth_standalone.py`。该副本不读取 JSON，也不依赖项目内的其他 Python 模块。独立版 CollisionSafe 30F V11 使用 0.12 kg 顶点质量、1.5 Time Scale，并把 Sewing Max Force 从 2 渐增至 6；五个径向力场覆盖车头、车尾及四角，初期峰值 0.75，随后维持 0.10 的弱展开力。启用 `HEM_REAR` 时，其目标相对车罩中心向外 100 mm、向下 220 mm，有效 Pin 权重在第 13 帧完全释放；之后组合 Pin 只保留 `PIN_ROOF` 弱锚点，避免固定 X/Y 目标把下摆拉入碰撞凹槽。
+Self-contained Blender scripts are in `scripts/blender/`. The V28 cloth preset samples free drape, then ramps per-vertex soft pin springs during frames 45-65 toward one shared HEM height and holds through frame 75. Clear the Cloth bake before setup and replay from Scene Start. See [Blender instructions](scripts/blender/README.md).
 
 展开辅助力采用 `frame_change_pre` 调度；Sewing、后摆 Shape Key 与 Pin 强度使用持久化 Driver，避免逐帧改写 Cloth 设置而中断 Bake。两者都不创建 Action，兼容 Blender 5.x 的分层动画和依赖图。
 
@@ -101,7 +102,7 @@ Blender Z。脚本不是直接把二维数值写入 Blender X/Y。
 
 ### 配置版如何读取参数
 
-项目内运行 [setup_mirror_markers.py](scripts/blender/setup_mirror_markers.py) 时，
+项目内运行 [setup_mirror_markers.py](scripts/blender/config_driven/setup_mirror_markers.py) 时，
 读取 `config/simulation.json` 的 `mirror_markers` 段，然后把完整配置传给公共执行
 函数。修改 JSON 后重新运行脚本即可生效：
 
@@ -135,15 +136,15 @@ Blender Z。脚本不是直接把二维数值写入 Blender X/Y。
 - `width_mm`、`height_mm`：可视标记的椭圆查找宽高；
 - `search_depth_mm`：允许车罩表面相对车辆侧面的横向距离。
 
-### standalone 版如何读取参数
+### 独立运行 版如何读取参数
 
-[setup_mirror_markers_standalone.py](scripts/blender/setup_mirror_markers_standalone.py)
+[setup_mirror_markers.py](scripts/blender/setup_mirror_markers.py)
 不读取 JSON，也不导入项目模块。它使用文件顶部内嵌的 `MARKER_CONFIG` 作为
 交互窗口默认值，方便将整个脚本复制进 `.blend` 的 Text Editor。运行脚本会先
 打开“车罩耳位 / 充电口标记”窗口；可在窗口中修改车头方向、两组中心坐标、
 标记宽高、充电口侧别和搜索深度，按“确定”后才会写入材质标记。修改
-`config/simulation.json` 不会自动改变 standalone 版的窗口默认值；如需永久调整
-默认值，必须同步修改 standalone 文件顶部的 `MARKER_CONFIG`。
+`config/simulation.json` 不会自动改变 独立运行 版的窗口默认值；如需永久调整
+默认值，必须同步修改 独立运行 文件顶部的 `MARKER_CONFIG`。
 
 两个入口最终都调用 `apply_mirror_markers()`：
 
@@ -152,7 +153,7 @@ setup_mirror_markers.py
   -> 读取 config/simulation.json
   -> apply_mirror_markers(config=CONFIG)
 
-setup_mirror_markers_standalone.py
+setup_mirror_markers.py
   -> 使用内嵌 MARKER_CONFIG 生成交互窗口默认值
   -> 用户在窗口确认或修改参数
   -> apply_mirror_markers(config=交互参数)
@@ -163,7 +164,7 @@ setup_mirror_markers_standalone.py
 1. 切换到车罩已经完成落车的最终比较帧；
 2. 选择与该车罩对应的车辆或 Collision 对象；
 3. 最后选择 Cloth 对象，使 Cloth 成为活动对象；
-4. 运行配置版或 standalone 版，两者只运行一个；standalone 版需在弹窗确认参数；
+4. 运行配置版或 独立运行 版，两者只运行一个；独立运行 版需在弹窗确认参数；
 5. 使用 Material Preview，或在 Solid 模式把 Color 设置为 Material，查看颜色。
 
 车辆参考选错、当前帧尚未落罩、车头轴配置错误或目标范围附近没有布料面时，

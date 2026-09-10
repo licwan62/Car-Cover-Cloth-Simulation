@@ -14,7 +14,7 @@ class CollisionShellScriptTests(unittest.TestCase):
             PROJECT_ROOT
             / "scripts"
             / "blender"
-            / "generate_collision_shell_standalone.py"
+            / "generate_collision_shell.py"
         )
         source = path.read_text(encoding="utf-8")
         tree = ast.parse(source)
