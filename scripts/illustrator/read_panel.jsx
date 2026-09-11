@@ -52,7 +52,14 @@
         var scale = Number(doc.scaleFactor) || 1;
         function point(p) { return (p[0] - rect[0]) + "," + (rect[1] - p[1]); }
         function same(a, b) { return Math.abs(a[0]-b[0]) < 1e-8 && Math.abs(a[1]-b[1]) < 1e-8; }
-        var xml = '<svg xmlns="http://www.w3.org/2000/svg" width="' + width*scale + 'pt" height="' + height*scale + 'pt" viewBox="0 0 ' + width + ' ' + height + '">';
+        // Match the trusted Tesla reference and express the physical viewport
+        // explicitly in millimetres. Illustrator coordinates are PostScript
+        // points (72 pt/in); scaleFactor restores Large Canvas documents.
+        // Avoiding a pt viewport also prevents importer-specific pt/DPI rules
+        // from shrinking the pattern in Blender.
+        var widthMM = width * scale * 25.4 / 72;
+        var heightMM = height * scale * 25.4 / 72;
+        var xml = '<svg xmlns="http://www.w3.org/2000/svg" width="' + widthMM + 'mm" height="' + heightMM + 'mm" viewBox="0 0 ' + width + ' ' + height + '">';
         var names = ["PANEL_TOP", "PANEL_LEFT", "PANEL_RIGHT"];
         for (var k = 0; k < names.length; k++) {
             var name = names[k], path = panels[name];

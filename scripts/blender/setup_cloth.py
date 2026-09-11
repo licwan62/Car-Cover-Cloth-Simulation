@@ -15,6 +15,8 @@ This file deliberately has no project imports and reads no JSON, so saving it
 inside a .blend file is enough to reproduce the preset.
 """
 
+import re
+
 import bpy
 from mathutils import Vector
 
@@ -223,10 +225,13 @@ REAR_DRAG_SUSTAIN_END = 49
 # checked in Blender's System Console while playing or baking the simulation.
 ENABLE_FORCE_STAGE_LOG = True
 
-# Base-mesh seam length diagnostics. Lengths are measured from connected mesh
-# edges in world space before simulation, so loose sewing connector edges do
-# not inflate either seam path.
-SEAM_LENGTH_COMPARE_PAIRS = (
+# Base-mesh seam length diagnostics.  Semantic groups are paired by their
+# shared Sxxx identifier (for example S001_TOP <-> S001_LEFT).  Lengths are
+# measured from connected mesh edges in world space before simulation, so
+# loose sewing connector edges do not inflate either seam path.  The old names
+# are retained only for meshes made before the semantic-SVG workflow.
+SEMANTIC_SEAM_GROUP = re.compile(r"^(S\d{3,})_([A-Z][A-Z0-9]*)$")
+LEGACY_SEAM_LENGTH_COMPARE_PAIRS = (
     ("SEAM_TOP_LEFT", "SEAM_LEFT_TOP"),
     ("SEAM_TOP_RIGHT", "SEAM_RIGHT_TOP"),
 )
@@ -596,6 +601,32 @@ def vertex_group_connected_length(obj, group_name):
     return total if total > 0.0 else None
 
 
+def seam_length_compare_pairs(obj):
+    """Return semantic seam pairs, falling back only for legacy meshes."""
+
+    by_id = {}
+    for group in obj.vertex_groups:
+        match = SEMANTIC_SEAM_GROUP.fullmatch(group.name)
+        if match is None:
+            continue
+        seam_id, panel = match.groups()
+        by_id.setdefault(seam_id, []).append((panel, group.name))
+
+    pairs = []
+    invalid = []
+    for seam_id, definitions in sorted(by_id.items()):
+        panels = {panel for panel, _name in definitions}
+        if len(definitions) != 2 or len(panels) != 2:
+            names = ", ".join(name for _panel, name in definitions)
+            invalid.append(f"{seam_id} ({names})")
+            continue
+        pairs.append(tuple(name for _panel, name in definitions))
+    if invalid:
+        print("  [CC SEAM WARNING] 语义缝线必须恰好对应两个不同 PANEL："
+              + "; ".join(invalid))
+    return pairs or list(LEGACY_SEAM_LENGTH_COMPARE_PAIRS)
+
+
 def report_sewing_preflight(obj):
     """Print connector count and paired seam-length differences."""
 
@@ -635,7 +666,7 @@ def report_sewing_preflight(obj):
                 "loose sewing edge；请重新运行 generate_sewing.py 修复配对。"
             )
 
-    for name_a, name_b in SEAM_LENGTH_COMPARE_PAIRS:
+    for name_a, name_b in seam_length_compare_pairs(obj):
         length_a = vertex_group_connected_length(obj, name_a)
         length_b = vertex_group_connected_length(obj, name_b)
         if length_a is None or length_b is None:

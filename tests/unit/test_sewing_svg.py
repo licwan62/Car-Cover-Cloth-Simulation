@@ -55,8 +55,14 @@ class SewingSVGTests(unittest.TestCase):
             self.assertEqual([len(g) for g in root], [3, 4, 4])
             self.assertEqual({p.get("id") for p in root[0]},
                              {"PANEL_TOP", "PANEL_LEFT", "PANEL_RIGHT"})
-            width = float(root.get("width").removesuffix("pt"))
-            self.assertAlmostEqual(width / float(root.get("viewBox").split()[2]), 10)
+            self.assertTrue(root.get("width").endswith("mm"))
+            self.assertTrue(root.get("height").endswith("mm"))
+            width_mm = float(root.get("width").removesuffix("mm"))
+            viewbox_width = float(root.get("viewBox").split()[2])
+            # Same explicit physical unit convention as the Tesla reference:
+            # one Illustrator point in viewBox space is 25.4 / 72 mm, with
+            # Large Canvas scaleFactor already represented by the viewport.
+            self.assertAlmostEqual(width_mm / viewbox_width, 25.4 / 72 * 10)
             for panel in root[0]:
                 self.assertTrue(svg.contour(panel))
             self.assertTrue(any("C" in p.get("d") for p in root[1]))

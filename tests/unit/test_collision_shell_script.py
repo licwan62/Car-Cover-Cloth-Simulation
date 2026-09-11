@@ -25,11 +25,13 @@ class CollisionShellScriptTests(unittest.TestCase):
             if isinstance(node, ast.Import)
             for alias in node.names
         }
-        self.assertEqual(imported_modules, {"bmesh", "bpy"})
+        self.assertEqual(imported_modules, {"bmesh", "bpy", "math"})
         self.assertNotIn("project_config", source)
         self.assertGreaterEqual(source.count("apply_voxel_remesh("), 3)
         self.assertIn("keep_largest_surface_component(", source)
-        self.assertIn("inspect_watertight_mesh(", source)
+        self.assertIn("inspect_lightweight_mesh(", source)
+        self.assertNotIn("inspect_watertight_mesh(", source)
+        self.assertIn("final_top_damage", source)
         self.assertIn("capture_top_surface_samples(", source)
         self.assertIn("measure_top_surface_damage(", source)
         self.assertIn("apply_thin_surface_protection(", source)
@@ -63,7 +65,8 @@ class CollisionShellScriptTests(unittest.TestCase):
             constants["MAX_TRIANGLES"],
         )
         self.assertTrue(constants["PRESERVE_SOURCE_BOUNDS"])
-        self.assertTrue(constants["ENABLE_THIN_SURFACE_REPAIR"])
+        self.assertFalse(constants["ENABLE_THIN_SURFACE_REPAIR"])
+        self.assertFalse(constants["ENFORCE_TOP_SURFACE_ACCURACY"])
         self.assertGreater(
             constants["THIN_SURFACE_PROTECTION_MM"],
             constants["COLLISION_VOXEL_MM"],

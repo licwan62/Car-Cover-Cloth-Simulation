@@ -1,127 +1,22 @@
 [
   {
-    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\定制\\DODGE-CHALLENGER.ai",
+    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\三厢\\3XXL-W_0910.ai",
+    "status": "failed",
+    "error": "Output already exists: D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\output\\sewing_svg\\三厢\\3XXL-W_0910_sewing.svg"
+  },
+  {
+    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\三厢\\3XXXL_0910.ai",
+    "status": "failed",
+    "error": "Illustrator PANEL extraction failed: ERROR: Missing PANEL_TOP under PANEL\r\nAt line:1 char:198\r\n+ ... \\sewing_ai_thnsf09f\\read.jsx'); if($message -ne 'OK'){throw $message}\r\n+                                                           ~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (ERROR: Missing PANEL_TOP under PANEL:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : ERROR: Missing PANEL_TOP under PANEL"
+  },
+  {
+    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\三厢\\3XXXXL_0910.ai",
     "status": "created",
-    "output": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\output\\sewing_svg\\定制\\DODGE-CHALLENGER_sewing.svg"
+    "output": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\output\\sewing_svg\\三厢\\3XXXXL_0910_sewing.svg"
   },
   {
-    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\定制\\TESLA-MODELX.ai",
-    "status": "created",
-    "output": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\output\\sewing_svg\\定制\\TESLA-MODELX_sewing.svg"
-  },
-  {
-    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\定制\\定制-modelx&challenger.ai",
+    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\三厢\\3XL-W_0910.ai",
     "status": "failed",
-    "error": "Illustrator PANEL extraction failed: ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0\r\nAt line:1 char:198\r\n+ ... \\sewing_ai_k7hqvpb_\\read.jsx'); if($message -ne 'OK'){throw $message}\r\n+                                                           ~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (ERROR: Expected... layer; found 0:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0"
-  },
-  {
-    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\皮卡\\PK-L_0814.ai",
-    "status": "created",
-    "output": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\output\\sewing_svg\\皮卡\\PK-L_0814_sewing.svg"
-  },
-  {
-    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\皮卡\\PK-L_0906.ai",
-    "status": "failed",
-    "error": "Illustrator PANEL extraction failed: ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0\r\nAt line:1 char:198\r\n+ ... \\sewing_ai_76ukfkdr\\read.jsx'); if($message -ne 'OK'){throw $message}\r\n+                                                           ~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (ERROR: Expected... layer; found 0:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0"
-  },
-  {
-    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\皮卡\\PK-M+_0814.ai",
-    "status": "created",
-    "output": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\output\\sewing_svg\\皮卡\\PK-M+_0814_sewing.svg"
-  },
-  {
-    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\皮卡\\PK-M+_0906.ai",
-    "status": "failed",
-    "error": "Illustrator PANEL extraction failed: ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0\r\nAt line:1 char:198\r\n+ ... \\sewing_ai_e6fdysj6\\read.jsx'); if($message -ne 'OK'){throw $message}\r\n+                                                           ~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (ERROR: Expected... layer; found 0:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0"
-  },
-  {
-    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\皮卡\\PK-M_0814.ai",
-    "status": "created",
-    "output": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\output\\sewing_svg\\皮卡\\PK-M_0814_sewing.svg"
-  },
-  {
-    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\皮卡\\PK-M_0906.ai",
-    "status": "failed",
-    "error": "Illustrator PANEL extraction failed: ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0\r\nAt line:1 char:198\r\n+ ... \\sewing_ai_b_xp_r7z\\read.jsx'); if($message -ne 'OK'){throw $message}\r\n+                                                           ~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (ERROR: Expected... layer; found 0:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0"
-  },
-  {
-    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\皮卡\\PK-XL_0814.ai",
-    "status": "created",
-    "output": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\output\\sewing_svg\\皮卡\\PK-XL_0814_sewing.svg"
-  },
-  {
-    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\皮卡\\PK-XL_0906.ai",
-    "status": "failed",
-    "error": "Illustrator PANEL extraction failed: ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0\r\nAt line:1 char:198\r\n+ ... \\sewing_ai_ogsrpkxi\\read.jsx'); if($message -ne 'OK'){throw $message}\r\n+                                                           ~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (ERROR: Expected... layer; found 0:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0"
-  },
-  {
-    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\皮卡\\PK-XXL_0814.ai",
-    "status": "created",
-    "output": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\output\\sewing_svg\\皮卡\\PK-XXL_0814_sewing.svg"
-  },
-  {
-    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\皮卡\\PK-XXL_0906.ai",
-    "status": "failed",
-    "error": "Illustrator PANEL extraction failed: ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0\r\nAt line:1 char:198\r\n+ ... \\sewing_ai_hl7mjylc\\read.jsx'); if($message -ne 'OK'){throw $message}\r\n+                                                           ~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (ERROR: Expected... layer; found 0:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0"
-  },
-  {
-    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\皮卡\\PK-XXXL_0814.ai",
-    "status": "created",
-    "output": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\output\\sewing_svg\\皮卡\\PK-XXXL_0814_sewing.svg"
-  },
-  {
-    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\皮卡\\PK-XXXL_0906.ai",
-    "status": "created",
-    "output": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\output\\sewing_svg\\皮卡\\PK-XXXL_0906_sewing.svg"
-  },
-  {
-    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\皮卡\\皮卡x6_0814.ai",
-    "status": "failed",
-    "error": "Illustrator PANEL extraction failed: ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0\r\nAt line:1 char:198\r\n+ ... \\sewing_ai_yc_e43c6\\read.jsx'); if($message -ne 'OK'){throw $message}\r\n+                                                           ~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (ERROR: Expected... layer; found 0:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0"
-  },
-  {
-    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\皮卡\\皮卡x6_0908.ai",
-    "status": "failed",
-    "error": "Illustrator PANEL extraction failed: ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0\r\nAt line:1 char:198\r\n+ ... \\sewing_ai_runci5r5\\read.jsx'); if($message -ne 'OK'){throw $message}\r\n+                                                           ~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (ERROR: Expected... layer; found 0:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0"
-  },
-  {
-    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\越野\\Y370_0906.ai",
-    "status": "failed",
-    "error": "Illustrator PANEL extraction failed: ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0\r\nAt line:1 char:198\r\n+ ... \\sewing_ai_tglckhmy\\read.jsx'); if($message -ne 'OK'){throw $message}\r\n+                                                           ~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (ERROR: Expected... layer; found 0:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0"
-  },
-  {
-    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\越野\\YL_0906.ai",
-    "status": "created",
-    "output": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\output\\sewing_svg\\越野\\YL_0906_sewing.svg"
-  },
-  {
-    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\越野\\YM_0906.ai",
-    "status": "created",
-    "output": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\output\\sewing_svg\\越野\\YM_0906_sewing.svg"
-  },
-  {
-    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\越野\\YXL_0906.ai",
-    "status": "failed",
-    "error": "Illustrator PANEL extraction failed: ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0\r\nAt line:1 char:198\r\n+ ... \\sewing_ai_2c0uqhat\\read.jsx'); if($message -ne 'OK'){throw $message}\r\n+                                                           ~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (ERROR: Expected... layer; found 0:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0"
-  },
-  {
-    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\越野\\YXXL-545_0906.ai",
-    "status": "failed",
-    "error": "Illustrator PANEL extraction failed: ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0\r\nAt line:1 char:198\r\n+ ... \\sewing_ai_8rlh_0lw\\read.jsx'); if($message -ne 'OK'){throw $message}\r\n+                                                           ~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (ERROR: Expected... layer; found 0:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0"
-  },
-  {
-    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\越野\\YXXL-585_0906.ai",
-    "status": "failed",
-    "error": "Illustrator PANEL extraction failed: ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0\r\nAt line:1 char:198\r\n+ ... \\sewing_ai_t2f61d96\\read.jsx'); if($message -ne 'OK'){throw $message}\r\n+                                                           ~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (ERROR: Expected... layer; found 0:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0"
-  },
-  {
-    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\越野\\YXXL_0906.ai",
-    "status": "failed",
-    "error": "Illustrator PANEL extraction failed: ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0\r\nAt line:1 char:198\r\n+ ... \\sewing_ai_y39satft\\read.jsx'); if($message -ne 'OK'){throw $message}\r\n+                                                           ~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (ERROR: Expected... layer; found 0:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0"
-  },
-  {
-    "source": "D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\illustrator\\越野\\越野车_6版_0906.ai",
-    "status": "failed",
-    "error": "Illustrator PANEL extraction failed: ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0\r\nAt line:1 char:198\r\n+ ... \\sewing_ai_onnvbme_\\read.jsx'); if($message -ne 'OK'){throw $message}\r\n+                                                           ~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (ERROR: Expected... layer; found 0:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : ERROR: Expected exactly one PANEL (or 01_PANEL) layer; found 0"
+    "error": "Output already exists: D:\\Licheng\\Repo\\Car Cover Cloth Simulation\\output\\sewing_svg\\三厢\\3XL-W_0910_sewing.svg"
   }
 ]

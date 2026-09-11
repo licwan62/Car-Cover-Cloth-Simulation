@@ -14,8 +14,9 @@
 | `setup_mirror_markers.py` | Add the same mirror-position marks without project dependencies | Opens an interactive `MARKER_CONFIG` dialog before applying non-physical marks at the settled frame |
 | `config_driven/generate_collision_proxy.py` | Generate a smooth vehicle Collision Proxy | Reads `config/simulation.json`; delegates geometry work to the matching self-contained implementation |
 | `generate_collision_proxy.py` | Generate the same Collision Proxy without project dependencies | Embedded FastCollisionShell V5 settings; original evaluated topology, zero-or-one rear-wing support, optional voxel remesh, 18k-triangle collision budget, source-bounds correction, and Collision physics |
-| `generate_collision_shell.py` | Test a two-stage watertight collision-shell workflow | Creates a 35 mm inspection Outer Shell with adaptive thin-panel repair, extracts a 50 mm/6k-triangle Collision only from that shell, restores source bounds, and rejects disconnected or non-manifold output |
+| `generate_collision_shell.py` | Test a two-stage collision-shell workflow | Creates a 35 mm inspection Outer Shell, extracts a 50 mm/6k-triangle Collision only from that shell, restores source bounds, and runs lightweight geometry/silhouette checks |
 | `setup_cloth_fit_test.py` | Apply a lightweight Cloth preset | Quick car-cover fit test with embedded settings |
+| `svg_cloth_workflow.py` | Import a semantic SVG and run the complete cloth pipeline | One file dialog; joins PANEL curves, remeshes, generates Sewing, and applies the embedded cloth preset |
 | `export_three_views.py` | Real-size three-view SVG/PNG export | Auxiliary reporting tool |
 | `export_six_views.py` | Four orthographic views and two perspective views | Six PNGs and an embedded SVG atlas; self-contained |
 
@@ -75,21 +76,34 @@ vehicle meshes and run the script in Object Mode. It creates two objects in
 外侧厚度仅保留 1 mm，以免代理局部外鼓或额外撑大车衣。
 
 - `* Outer Shell TEST` is the retained fine shell for visual inspection only.
-- `* Shell Collision TEST` is the selected, validated Collision object to use
+- `* Shell Collision TEST` is the selected, lightweight-checked Collision object to use
   with Cloth.
 
 Stage one performs a 35 mm voxel union, removes every detached surface except
 the main vehicle shell, smooths it, and restores the source AABB. It then probes
-the upper silhouette against the evaluated source. If more than 2% of the
-sampled roof/hood surface is missing or has dropped by over 70 mm, stage one is
-automatically rebuilt from a temporary 55 mm Solidify copy. This protects
-zero-thickness panels such as the separate LADA Niva hood without changing the
-source object. Stage two voxelizes the accepted shell again at 50 mm, removes
+the upper silhouette against the evaluated source using a lightweight 128-ray
+grid. In the default fast mode, excessive roof/hood loss produces a warning and
+keeps the shell for manual correction. Set `ENABLE_THIN_SURFACE_REPAIR=True`
+only when an automatic 250 mm Solidify rebuild is worth the potentially large
+voxel cost. Stage two voxelizes the accepted shell again at 50 mm, removes
 residual islands, smooths it, decimates it to 6,000 triangles, restores bounds,
-and enables double-sided Collision with 10 mm thickness and friction 3. Both
-stages must contain exactly one surface component with no boundary,
-non-manifold, loose, or degenerate geometry; otherwise the script stops without
-presenting the result as valid.
+and enables double-sided Collision with 1 mm thickness and friction 3. Both
+stages reject empty or non-finite geometry, and the final stage enforces the
+triangle budget and exact source bounds. Silhouette loss remains advisory while
+`ENFORCE_TOP_SURFACE_ACCURACY=False`.
+
+For high-detail vehicles, evaluated temporary copies are proportionally
+pre-decimated to 180,000 triangles before they are joined and voxelized. The
+stage-one voxel result is further capped at 30,000 triangles before smoothing.
+Neither stage runs the expensive full BMesh topology/volume audit. Accuracy is
+instead guarded by voxel remeshing, largest-component cleanup, source-bounds
+restoration, finite-coordinate checks, and a final BVH upper-silhouette probe.
+The original vehicle meshes are not modified. The generator prints progress
+before each blocking stage and rejects an estimated stage-one voxel grid above
+eight million cells, which usually indicates incorrect model units or distant
+stray geometry. Adjust `PRE_VOXEL_MAX_TRIANGLES`,
+`MAX_ESTIMATED_VOXEL_CELLS`, or the voxel sizes at the top of
+`generate_collision_shell.py` when a deliberate exception is required.
 
 In the `Lab.blend` Tesla test, the final shell was a single watertight component
 with zero boundary/non-manifold edges and exact source dimensions. A frame
@@ -150,3 +164,16 @@ Scripts in `scripts/blender/` use embedded settings and run without project JSON
 Run configuration-driven scripts from their saved project paths. Their JSON
 files remain in the repository's `config/` directory. Collision-proxy and
 mirror-marker wrappers reuse the implementations in the parent directory.
+
+## One-click SVG cloth workflow
+
+Open `svg_cloth_workflow.py` in Blender's Text Editor and click **Run Script**.
+Choose the semantic `_sewing.svg` file in the file dialog. The operator imports
+and joins only the curves inside the SVG `PANEL` group, creates the cloth mesh
+with `remesh.py`, generates semantic sewing from the same source file, and then
+applies `setup_cloth.py`. Existing vehicle Collision objects remain in the scene
+and are discovered by the cloth setup as usual. This is a single-file standalone
+script: it can also be pasted into an unsaved Blender Text block and does not
+need access to the repository or neighboring Python files. After changing one
+of its three source scripts, run `build_svg_cloth_workflow_standalone.py` once
+to refresh the embedded implementations.

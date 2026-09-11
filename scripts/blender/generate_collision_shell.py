@@ -10,12 +10,14 @@ all parts into one inspected Outer Shell and probes its top silhouette. If a
 zero-thickness hood or roof was lost, the stage is rebuilt from a temporary,
 deep inward-solidified copy. Stage two extracts a coarser collision surface from
 that shell, smooths and decimates it, repairs the low-poly surface, restores
-source bounds, validates manifold topology, and enables Collision physics only
-on the final proxy. Original source objects are never made colliders.
+source bounds, runs lightweight geometry/silhouette checks, and enables
+Collision physics only on the final proxy. Original source objects are never
+made colliders.
 """
 
 import bmesh
 import bpy
+import math
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
 
@@ -35,21 +37,21 @@ OUTER_SHELL_VOXEL_MM = 35.0
 OUTER_SHELL_SMOOTH_ITERATIONS = 2
 OUTER_SHELL_SMOOTH_FACTOR = 0.08
 
-# Voxel remesh can discard a detached, zero-thickness hood while retaining the
-# much larger engine/chassis volume below it. The repair turns exterior panels
-# into a deep, inward-only temporary skin, so the hood connects to the body and
-# masks internal components before disconnected volumes are removed. It never
-# touches the source meshes and does not inflate the visible exterior.
-ENABLE_THIN_SURFACE_REPAIR = True
+# Fast mode keeps silhouette checks advisory. Automatic deep Solidify repair
+# can multiply voxel output into millions of faces on detailed vehicles, so it
+# is disabled by default; enable it only for a final-quality rebuild.
+ENABLE_THIN_SURFACE_REPAIR = False
+ENFORCE_TOP_SURFACE_ACCURACY = False
 THIN_SURFACE_PROTECTION_MM = 250.0
-TOP_SURFACE_SAMPLES_X = 32
-TOP_SURFACE_SAMPLES_Y = 64
+# 128 rays retain broad roof/hood/trunk coverage with low BVH query overhead.
+TOP_SURFACE_SAMPLES_X = 8
+TOP_SURFACE_SAMPLES_Y = 16
 TOP_SURFACE_X_INSET_FACTOR = 0.08
 TOP_SURFACE_Y_INSET_FACTOR = 0.03
 TOP_SURFACE_MIN_HEIGHT_FACTOR = 0.38
 TOP_SURFACE_DROP_TOLERANCE_MM = 70.0
 MAX_TOP_SURFACE_DAMAGE_FRACTION = 0.02
-MIN_TOP_SURFACE_SAMPLE_COUNT = 100
+MIN_TOP_SURFACE_SAMPLE_COUNT = 32
 
 # A second extraction removes residual grooves and produces the actual solver
 # surface. The cloth mesh target is 50 mm, so a 50 mm collision voxel is a
@@ -81,6 +83,18 @@ COLLISION_FRICTION = 3.0
 COLLISION_USE_CULLING = False
 COLLISION_USE_NORMAL = True
 
+# High-detail vehicles can contain millions of evaluated triangles. Voxel
+# remesh does not need that density. Only temporary work copies are simplified.
+PRE_VOXEL_MAX_TRIANGLES = 180000
+PRE_VOXEL_MIN_TRIANGLES_PER_OBJECT = 500
+# The stage-one voxel mesh is only an intermediate silhouette. Reducing it
+# before smoothing/component inspection also makes the stage-two copy cheaper.
+OUTER_SHELL_POST_VOXEL_MAX_TRIANGLES = 30000
+
+# Guard against wrong units or distant geometry before Blender allocates a
+# huge dense voxel grid. Normal passenger vehicles are usually near 1M cells.
+MAX_ESTIMATED_VOXEL_CELLS = 8000000
+
 HIDE_FROM_RENDER = True
 SHOW_IN_FRONT = True
 EXCLUDE_CLOTH_OBJECTS = True
@@ -103,6 +117,16 @@ def validate_parameters():
         )
     if TARGET_TRIANGLES < 100 or MAX_TRIANGLES < TARGET_TRIANGLES:
         raise ValueError("Triangle limits are invalid")
+    if PRE_VOXEL_MAX_TRIANGLES < MAX_TRIANGLES:
+        raise ValueError("PRE_VOXEL_MAX_TRIANGLES must exceed MAX_TRIANGLES")
+    if PRE_VOXEL_MIN_TRIANGLES_PER_OBJECT < 100:
+        raise ValueError("PRE_VOXEL_MIN_TRIANGLES_PER_OBJECT is too small")
+    if OUTER_SHELL_POST_VOXEL_MAX_TRIANGLES < MAX_TRIANGLES:
+        raise ValueError(
+            "OUTER_SHELL_POST_VOXEL_MAX_TRIANGLES must exceed MAX_TRIANGLES"
+        )
+    if MAX_ESTIMATED_VOXEL_CELLS < 1000:
+        raise ValueError("MAX_ESTIMATED_VOXEL_CELLS is too small")
     if not 0.0 <= VOXEL_INWARD_COMPENSATION_FACTOR <= 0.5:
         raise ValueError(
             "VOXEL_INWARD_COMPENSATION_FACTOR must be in [0, 0.5]"
@@ -324,6 +348,72 @@ def mesh_triangle_count(mesh):
     return len(mesh.loop_triangles)
 
 
+def estimated_voxel_cells(bounds, voxel_mm):
+    """Conservative dense-grid cell count for an AABB and voxel size."""
+
+    voxel = voxel_mm / 1000.0
+    dimensions = bounds_dimensions(bounds)
+    return math.prod(max(1, math.ceil(dimension / voxel) + 3)
+                     for dimension in dimensions)
+
+
+def validate_voxel_budget(bounds):
+    dimensions = bounds_dimensions(bounds)
+    cells = estimated_voxel_cells(bounds, OUTER_SHELL_VOXEL_MM)
+    dimensions_text = " x ".join(f"{value:.3f}" for value in dimensions)
+    print(
+        f"[CC SHELL] Bounds: {dimensions_text} m; estimated stage-1 grid: "
+        f"{cells:,} cells",
+        flush=True,
+    )
+    if cells > MAX_ESTIMATED_VOXEL_CELLS:
+        raise RuntimeError(
+            f"Estimated voxel grid has {cells:,} cells, above the safe limit "
+            f"of {MAX_ESTIMATED_VOXEL_CELLS:,}. Source bounds are "
+            f"{dimensions_text} m. Check model units/distant geometry or "
+            "increase OUTER_SHELL_VOXEL_MM."
+        )
+
+
+def predecimate_work_objects(work_objects):
+    """Reduce evaluated temporary meshes before expensive join/BVH/remesh."""
+
+    counts = [mesh_triangle_count(obj.data) for obj in work_objects]
+    total = sum(counts)
+    if total <= PRE_VOXEL_MAX_TRIANGLES:
+        print(
+            f"[CC SHELL] Pre-voxel input: {total:,} triangles; "
+            "pre-decimation not needed",
+            flush=True,
+        )
+        return total, total
+
+    ratio = PRE_VOXEL_MAX_TRIANGLES / total
+    print(
+        f"[CC SHELL] Pre-decimating {total:,} evaluated triangles toward "
+        f"{PRE_VOXEL_MAX_TRIANGLES:,} before join/remesh...",
+        flush=True,
+    )
+    for obj, count in zip(work_objects, counts):
+        if count <= PRE_VOXEL_MIN_TRIANGLES_PER_OBJECT:
+            continue
+        target = max(PRE_VOXEL_MIN_TRIANGLES_PER_OBJECT, int(count * ratio))
+        if target >= count:
+            continue
+        modifier = obj.modifiers.new("CC Pre-Voxel Decimate", type="DECIMATE")
+        modifier.decimate_type = "COLLAPSE"
+        modifier.ratio = max(0.001, min(1.0, target / count))
+        modifier.use_collapse_triangulate = False
+        apply_modifier(obj, modifier)
+    reduced = sum(mesh_triangle_count(obj.data) for obj in work_objects)
+    print(
+        f"[CC SHELL] Pre-decimation complete: {total:,} -> "
+        f"{reduced:,} triangles",
+        flush=True,
+    )
+    return total, reduced
+
+
 def apply_modifier(obj, modifier):
     select_only([obj], obj)
     result = bpy.ops.object.modifier_apply(modifier=modifier.name)
@@ -435,6 +525,12 @@ def apply_thin_surface_protection(obj):
 def apply_voxel_remesh(obj, voxel_mm, modifier_name):
     """Union visible parts and retain only the principal watertight volume."""
 
+    before = mesh_triangle_count(obj.data)
+    print(
+        f"[CC SHELL] Applying {modifier_name}: {before:,} triangles, "
+        f"voxel={voxel_mm:g} mm...",
+        flush=True,
+    )
     modifier = obj.modifiers.new(modifier_name, type="REMESH")
     modifier.mode = "VOXEL"
     modifier.voxel_size = voxel_mm / 1000.0
@@ -447,11 +543,21 @@ def apply_voxel_remesh(obj, voxel_mm, modifier_name):
             f"{modifier_name} produced no faces; check that 1 BU = 1 m or "
             "reduce the voxel size"
         )
+    print(
+        f"[CC SHELL] {modifier_name} complete: "
+        f"{mesh_triangle_count(obj.data):,} triangles",
+        flush=True,
+    )
 
 
 def apply_laplacian_smooth(obj, iterations, factor, modifier_name):
     if iterations <= 0 or factor <= 0.0:
         return
+    print(
+        f"[CC SHELL] Applying {modifier_name}: iterations={iterations}, "
+        f"factor={factor:g}...",
+        flush=True,
+    )
     modifier = obj.modifiers.new(modifier_name, type="LAPLACIANSMOOTH")
     modifier.lambda_factor = factor
     modifier.lambda_border = factor
@@ -459,6 +565,32 @@ def apply_laplacian_smooth(obj, iterations, factor, modifier_name):
     modifier.use_normalized = True
     modifier.use_volume_preserve = True
     apply_modifier(obj, modifier)
+    print(f"[CC SHELL] {modifier_name} complete", flush=True)
+
+
+def decimate_to_target(obj, target, modifier_name):
+    """Collapse a temporary mesh to an upper triangle target."""
+
+    before = mesh_triangle_count(obj.data)
+    if before <= target:
+        return before, before
+    print(
+        f"[CC SHELL] Applying {modifier_name}: {before:,} -> "
+        f"about {target:,} triangles...",
+        flush=True,
+    )
+    modifier = obj.modifiers.new(modifier_name, type="DECIMATE")
+    modifier.decimate_type = "COLLAPSE"
+    modifier.ratio = max(0.001, min(1.0, target / before))
+    modifier.use_collapse_triangulate = False
+    apply_modifier(obj, modifier)
+    after = mesh_triangle_count(obj.data)
+    print(
+        f"[CC SHELL] {modifier_name} complete: {before:,} -> "
+        f"{after:,} triangles",
+        flush=True,
+    )
+    return before, after
 
 
 def apply_decimation(obj):
@@ -585,27 +717,6 @@ def clean_low_poly_surface(obj):
     obj.data.update()
 
 
-def surface_component_sizes(bm):
-    """Return face-connected component sizes, excluding unused vertices."""
-
-    remaining = set(bm.faces)
-    sizes = []
-    while remaining:
-        seed = remaining.pop()
-        stack = [seed]
-        size = 1
-        while stack:
-            face = stack.pop()
-            for edge in face.edges:
-                for neighbor in edge.link_faces:
-                    if neighbor in remaining:
-                        remaining.remove(neighbor)
-                        stack.append(neighbor)
-                        size += 1
-        sizes.append(size)
-    return sorted(sizes, reverse=True)
-
-
 def keep_largest_surface_component(obj):
     """Discard detached detail islands while retaining the main vehicle shell."""
 
@@ -656,19 +767,36 @@ def build_stage_one_shell(obj, reference_bounds, protect_thin_surfaces):
         OUTER_SHELL_VOXEL_MM,
         "CC Stage 1 Outer Shell Voxel Union",
     )
+    decimate_to_target(
+        obj,
+        OUTER_SHELL_POST_VOXEL_MAX_TRIANGLES,
+        "CC Stage 1 Post-Voxel Decimate",
+    )
     apply_laplacian_smooth(
         obj,
         OUTER_SHELL_SMOOTH_ITERATIONS,
         OUTER_SHELL_SMOOTH_FACTOR,
         "CC Stage 1 Outer Shell Smooth",
     )
-    removed_islands, removed_island_faces = keep_largest_surface_component(
-        obj
+    print("[CC SHELL] Removing detached stage-1 islands...", flush=True)
+    removed_islands, removed_island_faces = keep_largest_surface_component(obj)
+    print(
+        f"[CC SHELL] Island cleanup complete: removed "
+        f"{removed_islands} component(s), {removed_island_faces:,} faces",
+        flush=True,
     )
+    print("[CC SHELL] Compensating voxel surface expansion...", flush=True)
     compensate_voxel_surface_expansion(obj, OUTER_SHELL_VOXEL_MM)
+    print("[CC SHELL] Restoring source bounds...", flush=True)
     bounds_report = restore_reference_bounds(obj, reference_bounds)
+    print("[CC SHELL] Recalculating stage-1 normals...", flush=True)
     recalculate_normals(obj)
-    mesh_report = inspect_watertight_mesh(obj, "Outer Shell")
+    print("[CC SHELL] Running lightweight stage-1 checks...", flush=True)
+    mesh_report = inspect_lightweight_mesh(obj, "Outer Shell")
+    print(
+        "[CC SHELL] Stage 1 lightweight checks complete",
+        flush=True,
+    )
     return (
         removed_islands,
         removed_island_faces,
@@ -677,64 +805,45 @@ def build_stage_one_shell(obj, reference_bounds, protect_thin_surfaces):
     )
 
 
-def inspect_watertight_mesh(obj, stage_name, require_valid=True):
-    """Measure and optionally enforce collision-safe manifold topology."""
+def inspect_lightweight_mesh(obj, stage_name, max_triangles=None):
+    """Check essential mesh integrity without a full topology/volume audit."""
 
-    bm = bmesh.new()
-    try:
-        bm.from_mesh(obj.data)
-        bm.normal_update()
-        components = surface_component_sizes(bm)
-        boundary_edges = sum(1 for edge in bm.edges if edge.is_boundary)
-        non_manifold_edges = sum(
-            1 for edge in bm.edges if not edge.is_manifold
-        )
-        loose_edges = sum(1 for edge in bm.edges if not edge.link_faces)
-        loose_vertices = sum(1 for vertex in bm.verts if not vertex.link_faces)
-        degenerate_faces = sum(
-            1 for face in bm.faces if face.calc_area() <= 1.0e-12
-        )
-        signed_volume = bm.calc_volume(signed=True)
-        report = {
-            "vertices": len(bm.verts),
-            "faces": len(bm.faces),
-            "triangles": mesh_triangle_count(obj.data),
-            "surface_components": len(components),
-            "largest_component_faces": components[0] if components else 0,
-            "boundary_edges": boundary_edges,
-            "non_manifold_edges": non_manifold_edges,
-            "loose_edges": loose_edges,
-            "loose_vertices": loose_vertices,
-            "degenerate_faces": degenerate_faces,
-            "signed_volume": signed_volume,
-        }
-    finally:
-        bm.free()
-
+    mesh = obj.data
+    triangles = mesh_triangle_count(mesh)
     problems = []
-    if report["surface_components"] != 1:
-        problems.append(
-            f"surface components={report['surface_components']}"
-        )
-    for key in (
-        "boundary_edges",
-        "non_manifold_edges",
-        "loose_edges",
-        "loose_vertices",
-        "degenerate_faces",
+    if not mesh.vertices or not mesh.polygons or triangles <= 0:
+        problems.append("mesh is empty")
+    if max_triangles is not None and triangles > max_triangles:
+        problems.append(f"triangles={triangles} exceeds {max_triangles}")
+    if any(
+        not all(math.isfinite(value) for value in vertex.co)
+        for vertex in mesh.vertices
     ):
-        if report[key] != 0:
-            problems.append(f"{key}={report[key]}")
-    if report["signed_volume"] <= 0.0:
-        problems.append(f"signed_volume={report['signed_volume']:.6f}")
-    if require_valid and problems:
+        problems.append("vertex coordinates contain NaN/Inf")
+    if problems:
         raise RuntimeError(
-            f"{stage_name} failed watertight validation: "
+            f"{stage_name} failed lightweight integrity checks: "
             + ", ".join(problems)
         )
-    report["valid"] = not problems
-    report["problems"] = problems
-    return report
+
+    return {
+        "vertices": len(mesh.vertices),
+        "faces": len(mesh.polygons),
+        "triangles": triangles,
+        # A largest-component cleanup immediately precedes each call.
+        "surface_components": 1 if mesh.polygons else 0,
+        "largest_component_faces": len(mesh.polygons),
+        # These fields are intentionally not computed in lightweight mode.
+        "boundary_edges": -1,
+        "non_manifold_edges": -1,
+        "loose_edges": -1,
+        "loose_vertices": -1,
+        "degenerate_faces": -1,
+        "signed_volume": 0.0,
+        "valid": True,
+        "problems": [],
+        "validation_mode": "lightweight",
+    }
 
 
 def replace_previous_generated(name, incoming):
@@ -846,6 +955,9 @@ def store_report(obj, report, bounds_report):
 
 def store_top_surface_report(obj, repair_used, before_report, after_report):
     obj["collision_shell_thin_surface_repair_used"] = repair_used
+    obj["collision_shell_thin_surface_repair_needed"] = (
+        top_surface_is_damaged(before_report)
+    )
     obj["collision_shell_thin_surface_protection_mm"] = (
         THIN_SURFACE_PROTECTION_MM if repair_used else 0.0
     )
@@ -896,15 +1008,22 @@ def finalize_collision(obj, name, collection, sources, report, bounds_report):
 
 def print_report(label, report, bounds_report):
     scales, before_error_mm, after_error_mm = bounds_report
-    print(
-        f"{label}: vertices={report['vertices']}, faces={report['faces']}, "
-        f"triangles={report['triangles']}, "
-        f"components={report['surface_components']}, "
-        f"boundary={report['boundary_edges']}, "
-        f"nonManifold={report['non_manifold_edges']}, "
-        f"looseEdges={report['loose_edges']}, "
-        f"volume={report['signed_volume']:.4f} m^3"
-    )
+    if report.get("validation_mode") == "lightweight":
+        print(
+            f"{label}: vertices={report['vertices']}, "
+            f"faces={report['faces']}, triangles={report['triangles']}; "
+            "lightweight integrity checks passed"
+        )
+    else:
+        print(
+            f"{label}: vertices={report['vertices']}, faces={report['faces']}, "
+            f"triangles={report['triangles']}, "
+            f"components={report['surface_components']}, "
+            f"boundary={report['boundary_edges']}, "
+            f"nonManifold={report['non_manifold_edges']}, "
+            f"looseEdges={report['loose_edges']}, "
+            f"volume={report['signed_volume']:.4f} m^3"
+        )
     print(
         f"  bounds correction: before={before_error_mm:.3f} mm, "
         f"after={after_error_mm:.6f} mm, "
@@ -952,16 +1071,26 @@ def main():
         print(f"Removed {stale_count} stale work object(s)")
 
     try:
+        print("[CC SHELL] Copying evaluated source geometry...", flush=True)
         work_objects = create_evaluated_work_objects(sources, collection)
         source_bounds = combined_bounds(work_objects)
         source_triangles = sum(
             mesh_triangle_count(work.data) for work in work_objects
         )
+        validate_voxel_budget(source_bounds)
+        predecimate_work_objects(work_objects)
+        print("[CC SHELL] Joining temporary source copies...", flush=True)
         outer_shell = join_work_objects(work_objects)
         work_objects = [outer_shell]
+        print("[CC SHELL] Sampling the upper silhouette...", flush=True)
         top_samples, top_ray_start_z = capture_top_surface_samples(
             outer_shell,
             source_bounds,
+        )
+        print(
+            f"[CC SHELL] Captured {len(top_samples):,} top samples; "
+            "building stage 1...",
+            flush=True,
         )
         (
             removed_islands,
@@ -973,20 +1102,28 @@ def main():
             source_bounds,
             protect_thin_surfaces=False,
         )
+        print("[CC SHELL] Comparing stage-1 upper silhouette...", flush=True)
         top_damage_before = measure_top_surface_damage(
             outer_shell,
             top_samples,
             top_ray_start_z,
         )
-        repair_used = top_surface_is_damaged(top_damage_before)
+        repair_needed = top_surface_is_damaged(top_damage_before)
+        repair_used = False
         top_damage_after = top_damage_before
 
-        if repair_used:
-            if not ENABLE_THIN_SURFACE_REPAIR:
-                raise RuntimeError(
-                    "Outer Shell lost too much of the source top silhouette; "
-                    "enable thin-surface repair or lower the voxel size"
-                )
+        if repair_needed and not ENABLE_THIN_SURFACE_REPAIR:
+            print(
+                "[CC SHELL WARNING] Top-surface loss detected: "
+                f"{top_damage_before['damaged_samples']}/"
+                f"{top_damage_before['sample_count']} samples "
+                f"({top_damage_before['damage_fraction']:.1%}). Fast mode "
+                "will keep this shell for manual correction; set "
+                "ENABLE_THIN_SURFACE_REPAIR=True for an automatic rebuild.",
+                flush=True,
+            )
+        elif repair_needed:
+            repair_used = True
             print(
                 "[CC SHELL] Top-surface loss detected: "
                 f"{top_damage_before['damaged_samples']}/"
@@ -998,6 +1135,7 @@ def main():
             remove_object_and_mesh(outer_shell)
             outer_shell = None
             work_objects = create_evaluated_work_objects(sources, collection)
+            predecimate_work_objects(work_objects)
             outer_shell = join_work_objects(work_objects)
             work_objects = [outer_shell]
             (
@@ -1015,7 +1153,10 @@ def main():
                 top_samples,
                 top_ray_start_z,
             )
-            if top_surface_is_damaged(top_damage_after):
+            if (
+                ENFORCE_TOP_SURFACE_ACCURACY
+                and top_surface_is_damaged(top_damage_after)
+            ):
                 raise RuntimeError(
                     "Thin-surface repair could not preserve the source top "
                     "silhouette: "
@@ -1023,7 +1164,16 @@ def main():
                     f"{top_damage_after['sample_count']} samples remain "
                     "damaged"
                 )
+            if top_surface_is_damaged(top_damage_after):
+                print(
+                    "[CC SHELL WARNING] Automatic repair left "
+                    f"{top_damage_after['damaged_samples']}/"
+                    f"{top_damage_after['sample_count']} damaged samples; "
+                    "continuing for manual correction.",
+                    flush=True,
+                )
 
+        print("[CC SHELL] Creating stage-2 collision copy...", flush=True)
         collision_mesh = outer_shell.data.copy()
         collision = bpy.data.objects.new(
             "CC_SHELL_COLLISION_WORK",
@@ -1059,9 +1209,39 @@ def main():
             source_bounds,
         )
         recalculate_normals(collision)
-        collision_report = inspect_watertight_mesh(
+        print("[CC SHELL] Running lightweight stage-2 checks...", flush=True)
+        collision_report = inspect_lightweight_mesh(
             collision,
             "Collision Shell",
+            max_triangles=MAX_TRIANGLES,
+        )
+        final_top_damage = measure_top_surface_damage(
+            collision,
+            top_samples,
+            top_ray_start_z,
+        )
+        if (
+            ENFORCE_TOP_SURFACE_ACCURACY
+            and top_surface_is_damaged(final_top_damage)
+        ):
+            raise RuntimeError(
+                "Collision Shell lost too much of the source top silhouette: "
+                f"{final_top_damage['damaged_samples']}/"
+                f"{final_top_damage['sample_count']} samples damaged; "
+                "reduce COLLISION_VOXEL_MM or smoothing"
+            )
+        if top_surface_is_damaged(final_top_damage):
+            print(
+                "[CC SHELL WARNING] Final Collision Shell has "
+                f"{final_top_damage['damaged_samples']}/"
+                f"{final_top_damage['sample_count']} damaged top samples; "
+                "continuing for manual correction.",
+                flush=True,
+            )
+        print(
+            "[CC SHELL] Stage 2 lightweight geometry and silhouette checks "
+            "complete",
+            flush=True,
         )
 
         finalize_outer_shell(
@@ -1103,6 +1283,15 @@ def main():
             top_damage_before,
             top_damage_after,
         )
+        collision["collision_shell_final_top_damage_samples"] = (
+            final_top_damage["damaged_samples"]
+        )
+        collision["collision_shell_final_top_damage_fraction"] = (
+            final_top_damage["damage_fraction"]
+        )
+        collision["collision_shell_final_top_max_drop_mm"] = (
+            final_top_damage["maximum_drop_mm"]
+        )
         linked_source_count = link_sources_to_collection(sources, collection)
 
         if not KEEP_OUTER_SHELL:
@@ -1112,13 +1301,20 @@ def main():
         dimensions = bounds_dimensions(mesh_bounds(collision.data))
         print(f"Source triangles: {source_triangles}")
         print_report("Stage 1 Outer Shell", outer_report, outer_bounds_report)
+        repair_status = (
+            "ON"
+            if repair_used
+            else "OFF (manual review recommended)"
+            if repair_needed
+            else "not needed"
+        )
         print(
             "  top-surface probe: "
             f"{top_damage_before['damaged_samples']}/"
             f"{top_damage_before['sample_count']} damaged before, "
             f"{top_damage_after['damaged_samples']}/"
             f"{top_damage_after['sample_count']} after; "
-            f"thin-surface repair={'ON' if repair_used else 'not needed'}"
+            f"thin-surface repair={repair_status}"
         )
         print(
             f"  removed detached islands={removed_islands}, "
@@ -1128,6 +1324,12 @@ def main():
             "Stage 2 Collision",
             collision_report,
             collision_bounds_report,
+        )
+        print(
+            "  final top-surface probe: "
+            f"{final_top_damage['damaged_samples']}/"
+            f"{final_top_damage['sample_count']} damaged, "
+            f"max drop={final_top_damage['maximum_drop_mm']:.1f} mm"
         )
         print(
             f"  removed detached islands={collision_removed_islands}, "

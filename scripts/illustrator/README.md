@@ -18,7 +18,8 @@ AI 输入读取唯一的 `PANEL`（也接受 `01_PANEL`）图层下的 `PANEL_TO
 一个闭合轮廓；支持单轮廓复合路径，拒绝裁剪、多轮廓和开放路径。名称决定版片身份。
 即使 PANEL 隐藏、未写入 PDF 兼容预览，也通过 Illustrator 原生对象读取。
 保留三次贝塞尔控制点，并将 Illustrator Y 轴转换为 SVG Y 轴；尺寸包含大画布
-`scaleFactor`，以当前画板作为 viewBox。脚本打开磁盘 AI 的临时副本并无保存关闭，
+`scaleFactor`，以当前画板作为 viewBox；物理画布尺寸按 Tesla 参考文件明确写成
+`mm`，避免 Blender 对 `pt`/DPI 的兼容性换算差异。脚本打开磁盘 AI 的临时副本并无保存关闭，
 不会读取当前打开文档尚未保存的改动。其他图层不会进入输出。
 
 ```powershell
