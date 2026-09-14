@@ -453,6 +453,14 @@ def distance_to_boundary(p, boundary):
     return minimum
 
 
+def has_boundary_clearance(p, boundary, clearance):
+    """Stop once an edge proves the candidate is too close to the boundary."""
+    return all(
+        point_segment_distance(p, a, boundary[(i + 1) % len(boundary)]) >= clearance
+        for i, a in enumerate(boundary)
+    )
+
+
 # ============================================================
 # MAIN
 # ============================================================
@@ -635,7 +643,7 @@ for panel_boundary in boundary_loops:
 
             if point_inside_polygon(p, panel_boundary):
 
-                if distance_to_boundary(p, panel_boundary) >= clearance:
+                if has_boundary_clearance(p, panel_boundary, clearance):
                     interior.append(p)
 
             x += dx

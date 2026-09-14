@@ -19,8 +19,13 @@ import xml.etree.ElementTree as ET
 SVG = "http://www.w3.org/2000/svg"
 TOKEN = re.compile(r"[A-Za-z]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?")
 EPS = 1e-6
+# Illustrator exports can retain a few hundredths of a unit of rounding drift
+# at a path's closing point.  Keep geometric comparisons strict elsewhere, but
+# allow that export precision when recognizing TOP end hems.
+BOUNDARY_EPS = 0.05
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-OUTPUT_DIR = PROJECT_ROOT / "output" / "sewing_svg"
+EXPORT_DIR = PROJECT_ROOT / "illustrator" / "export"
+OUTPUT_DIR = EXPORT_DIR / "sewing_svg"
 
 
 def near(a, b):
@@ -159,7 +164,8 @@ def split_panel(segments, top=False):
         return left_to_right(segments[i + 1:] + segments[:i]), [segments[i]]
     end_indices = [i for i, (a, b, c) in enumerate(segments)
                    if c is None and abs(a[0] - b[0]) < EPS
-                   and (abs(a[0] - low) < EPS or abs(a[0] - high) < EPS)]
+                   and (abs(a[0] - low) < BOUNDARY_EPS
+                        or abs(a[0] - high) < BOUNDARY_EPS)]
 
     # Illustrator may split one straight TOP end into several consecutive
     # vertical path commands. Treat each cyclic run at one X extreme as a
@@ -291,7 +297,7 @@ def read_ai(source):
 def default_output(source):
     source = Path(source).resolve()
     try:
-        parent = source.parent.relative_to(PROJECT_ROOT / "illustrator")
+        parent = source.parent.relative_to(EXPORT_DIR)
     except ValueError:
         parent = Path()
     return OUTPUT_DIR / parent / (source.stem + "_sewing.svg")

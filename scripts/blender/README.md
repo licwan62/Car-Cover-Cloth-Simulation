@@ -1,5 +1,42 @@
 # Blender Modules
 
+## Exterior-only collision envelope
+
+Run `generate_collision_exterior.py` in Blender's Text Editor in Object Mode,
+with the original vehicle meshes selected. The new `* Exterior Collision` mesh
+is selected on completion. Sources and their modifiers remain unchanged. If
+sources or older proxies already have Collision enabled, disable those colliders
+before simulating so the cloth only contacts the new shell.
+
+This standalone alternative samples the closest evaluated surface from both
+ends of world X/Y/Z rays. It fills the spans between opposing exterior hits,
+closes small gaps, and extracts/remeshes that envelope instead of remeshing or
+decimating the source parts. Hidden interior surfaces do not change the first
+hits. Single-sided panels are sampled too. Only the largest spatial component
+is retained; enclosed cavity surfaces and detached islands are removed. Output
+must pass closed-manifold and nonzero-volume checks before Collision is added.
+
+Defaults: `VOXEL_SIZE_MM=40`, `GAP_CLOSE_CELLS=1`, `TARGET_TRIANGLES=12000`,
+1 mm collision margin, double-sided collision. Millimetres respect the scene
+unit scale. High-poly input is used for BVH queries without pre-decimation;
+grid and evaluated-triangle budgets reject excessive allocations. Reduce voxel
+size for finer features at greater processing/memory cost. The triangle target
+is approximate, not a hard cap. Progress is printed to Blender's console.
+
+The envelope deliberately bridges concavities, wheel wells and under-wing gaps.
+Open bodywork can expose interior parts to the rays; this is geometric exterior
+sampling, not semantic part classification. Features thinner than the sampling
+spacing may be missed, and detached mirrors can be discarded. Voxelization and
+smoothing can shift dimensions by roughly the sampling scale; source bounds
+are not forcibly restored. Inspect the result before baking, and use original
+geometry for fit measurements. This script does not change the existing proxy
+or two-stage shell generators.
+
+Blender regression check (synthetic meshes, no existing scene edits):
+`blender --background --factory-startup --python-exit-code 1 --python tests/unit/blender_collision_exterior_check.py`
+
+## Module index
+
 | Module | Responsibility | Current status |
 | --- | --- | --- |
 | `config_driven/project_config.py` | Load and validate project JSON | Blender-independent |
@@ -15,6 +52,7 @@
 | `config_driven/generate_collision_proxy.py` | Generate a smooth vehicle Collision Proxy | Reads `config/simulation.json`; delegates geometry work to the matching self-contained implementation |
 | `generate_collision_proxy.py` | Generate the same Collision Proxy without project dependencies | Embedded FastCollisionShell V5 settings; original evaluated topology, zero-or-one rear-wing support, optional voxel remesh, 18k-triangle collision budget, source-bounds correction, and Collision physics |
 | `generate_collision_shell.py` | Test a two-stage collision-shell workflow | Creates a 35 mm inspection Outer Shell, extracts a 50 mm/6k-triangle Collision only from that shell, restores source bounds, and runs lightweight geometry/silhouette checks |
+| `generate_collision_exterior.py` | Build an exterior-only drape collider | Six-direction first-hit envelope, gap closing, cavity/island removal, and closed-manifold validation; source topology is never decimated |
 | `setup_cloth_fit_test.py` | Apply a lightweight Cloth preset | Quick car-cover fit test with embedded settings |
 | `svg_cloth_workflow.py` | Import a semantic SVG and run the complete cloth pipeline | One file dialog; joins PANEL curves, remeshes, generates Sewing, and applies the embedded cloth preset |
 | `export_three_views.py` | Real-size three-view SVG/PNG export | Auxiliary reporting tool |

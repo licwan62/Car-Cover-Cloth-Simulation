@@ -1955,6 +1955,7 @@ def _capture_cloth_world_trajectory_v24(
     modifier,
     vertex_indices,
     end_frame,
+    on_frame=None,
 ):
     """Evaluate Cloth sequentially and sample indexed vertices through a frame."""
 
@@ -1986,6 +1987,8 @@ def _capture_cloth_world_trajectory_v24(
                 @ evaluated.data.vertices[vertex_index].co.copy()
                 for vertex_index in vertex_indices
             }
+            if on_frame is not None:
+                on_frame(current_frame, trajectory[current_frame])
         return trajectory
     finally:
         for downstream_modifier, was_visible in downstream:
@@ -2762,24 +2765,35 @@ def configure_hem_level_feedback(obj, cloth):
     start = scene.frame_start + HEM_FEEDBACK_START
     end = start + HEM_FEEDBACK_RAMP
     cloth.settings.use_dynamic_mesh = False
-    trajectory = _capture_cloth_world_trajectory_v24(
-        obj, cloth, indices, scene.frame_start + SIMULATION_END_OFFSET)
-    points = trajectory[start]
     target = HEM_FEEDBACK_TARGET_Z
-    if target is None:
-        target = sum(p.z for p in points.values()) / len(points)
-    maximum = max(abs(p.z - target) for p in points.values()) * 1000
-    if maximum > HEM_FEEDBACK_LIMIT_MM:
-        raise RuntimeError(f"HEM leveling requires {maximum:.1f} mm; "
-                           f"limit is {HEM_FEEDBACK_LIMIT_MM:g} mm. Adjust target or drape first.")
+
+    def check_target(frame, points):
+        nonlocal target
+        if frame != start:
+            return
+        if target is None:
+            target = sum(p.z for p in points.values()) / len(points)
+        maximum = max(abs(p.z - target) for p in points.values()) * 1000
+        if maximum > HEM_FEEDBACK_LIMIT_MM:
+            raise RuntimeError(f"HEM leveling requires {maximum:.1f} mm; "
+                               f"limit is {HEM_FEEDBACK_LIMIT_MM:g} mm. Adjust target or drape first.")
+
+    print(f"[CC HEM] Sampling trajectory: {scene.frame_start} to "
+          f"{scene.frame_start + SIMULATION_END_OFFSET}", flush=True)
+    trajectory = _capture_cloth_world_trajectory_v24(
+        obj, cloth, indices, scene.frame_start + SIMULATION_END_OFFSET,
+        on_frame=check_target)
+    points = trajectory[start]
     if obj.data.shape_keys is None:
         obj.shape_key_add(name="Basis", from_mix=False)
     basis = obj.data.shape_keys.key_blocks[0]
+    from array import array
+    basis_coordinates = array('f', [0.0]) * (3 * len(obj.data.vertices))
+    basis.data.foreach_get("co", basis_coordinates)
     inverse = obj.matrix_world.inverted()
     for frame, frame_points in trajectory.items():
         key = obj.shape_key_add(name=f"{HEM_LIVE_KEY}_{frame:04d}", from_mix=False)
-        for vertex in obj.data.vertices:
-            key.data[vertex.index].co = basis.data[vertex.index].co
+        key.data.foreach_set("co", basis_coordinates)
         for index, world in frame_points.items():
             point = world.copy()
             point.z = hem_level_target_z(point.z, target, frame, start, end)

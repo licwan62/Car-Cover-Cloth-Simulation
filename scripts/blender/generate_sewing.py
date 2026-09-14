@@ -14,6 +14,7 @@ the left endpoint and B is the right endpoint. Run this before arranging in 3D.
 """
 
 import re
+from bisect import bisect_left
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 
@@ -282,12 +283,13 @@ def _best_mapper(panel_paths, seam_paths, boundary_points, boundary_segments):
     probes = [point for path in seam_paths.values() for point in path]
     best = None
     for mapper in _candidate_mappers(svg_bounds, mesh_bounds):
+        mapped_probes = [mapper(point) for point in probes]
         error = sum(
             min(
-                _distance_to_segment(mapper(point), start, end)
+                _distance_to_segment(point, start, end)
                 for start, end in boundary_segments
             )
-            for point in probes
+            for point in mapped_probes
         ) / len(probes)
         if best is None or error < best[0]:
             best = (error, mapper)
@@ -446,17 +448,23 @@ def _sample_path(path, coordinates, count):
     result = []
     for sample in range(count):
         target = total * sample / (count - 1)
-        nearest = min(range(len(path)), key=lambda index: abs(cumulative[index] - target))
+        right = bisect_left(cumulative, target)
+        candidates = (max(0, right - 1), min(right, len(path) - 1))
+        nearest = min(candidates, key=lambda index: abs(cumulative[index] - target))
+        # Match the original first-index tie break, including zero-length edges.
+        nearest = bisect_left(cumulative, cumulative[nearest])
         if not result or result[-1] != path[nearest]:
             result.append(path[nearest])
     return result, total
 
 
-def build_semantic_sewing(obj, filepath):
+def build_semantic_sewing(obj, filepath, semantic_data=None):
     if obj is None or obj.type != "MESH" or obj.mode != "OBJECT":
         raise RuntimeError("请在 Object Mode 激活已合并的平面 Cloth Mesh。")
 
-    panels, seams, hems, seam_pairs = _semantic_svg(filepath)
+    panels, seams, hems, seam_pairs = (
+        _semantic_svg(filepath) if semantic_data is None else semantic_data
+    )
     mesh = obj.data
     boundary_edges, boundary_indices = _boundary_data(mesh)
     coordinates = {vertex.index: vertex.co.copy() for vertex in mesh.vertices}
