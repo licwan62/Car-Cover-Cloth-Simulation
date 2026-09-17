@@ -1,11 +1,11 @@
-"""Apply a self-contained 75-frame sew, drape and HEM-level car-cover preset.
+"""Apply a self-contained 50-frame sew and drape car-cover preset.
 
 Usage in Blender:
 1. Open the Scripting workspace and create a new Text block.
 2. Paste this entire file into the Text Editor.
 3. Select one or more 50 mm cloth mesh objects in Object Mode.
-4. Clear any old Cloth bake, run Script, then simulate frames 1 through 75
-   (or Scene Start through Scene Start + 74).
+4. Clear any old Cloth bake, run Script, then simulate frames 1 through 50
+   (or Scene Start through Scene Start + 49).
 5. Start with non-intersecting panels. Self-collision is active from the start;
    the final stage applies per-vertex animated soft pin spring forces.
    Replay sequentially from Scene Start after clearing the cache; rerun this
@@ -22,28 +22,31 @@ from mathutils import Vector
 
 
 # ============================================================
-# EMBEDDED PRESET: CarCover_HemFeedback_75F_V28
+# EMBEDDED PRESET: CarCover_Simplified_50F_V29
 # Assumptions:
 # - 1 Blender Unit = 1 metre
 # - Average cloth mesh edge length is approximately 50 mm
-# - Final-stage soft HEM pin springs follow sampled free-drape X/Y
+# - Sewing, gravity and collision settle without a post-simulation HEM pass
 # ============================================================
 
-PRESET_NAME = "CarCover_HemFeedback_75F_V28"
-MATERIAL_PRESET_NAME = "Car Cover Natural Drape (uncalibrated)"
+PRESET_NAME = "CarCover_Simplified_50F_V29"
+MATERIAL_PRESET_NAME = "Car Cover Structured Oxford (uncalibrated)"
 MESH_EDGE_TARGET_MM = 50.0
-SIMULATION_END_OFFSET = 74
+SIMULATION_END_OFFSET = 49
 
 QUALITY_STEPS = 20
 TIME_SCALE = 1.0
 MASS_PER_VERTEX = 0.25
 AIR_DAMPING = 3.0
 
-TENSION_STIFFNESS = 60.0
-COMPRESSION_STIFFNESS = 50.0
-SHEAR_STIFFNESS = 50.0
-BENDING_STIFFNESS = 8.0
-BENDING_STIFFNESS_DURING_SEWING = 8.0
+# A structured 210D-style cover should hold its broad panels rather than read
+# as a soft drape: increase in-plane resistance modestly and make bending the
+# dominant change.  The initial value remains lower for a stable sew-in.
+TENSION_STIFFNESS = 75.0
+COMPRESSION_STIFFNESS = 68.0
+SHEAR_STIFFNESS = 65.0
+BENDING_STIFFNESS = 20.0
+BENDING_STIFFNESS_DURING_SEWING = 12.0
 BENDING_RECOVERY_START = 7
 BENDING_RECOVERY_END = 17
 BENDING_MODEL = "ANGULAR"
@@ -99,7 +102,7 @@ SEAM_FACE_PROPERTY = "cc_seam_marker_faces"
 BASE_MATERIAL_NAME = "CC Cloth Base"
 FABRIC_COLOR = (0.035, 0.055, 0.085, 1.0)
 SEAM_COLOR = (1.0, 0.12, 0.015, 1.0)
-FABRIC_ROUGHNESS = 0.72
+FABRIC_ROUGHNESS = 0.62
 
 # A post-Weld Catmull-Clark modifier must rebuild its topology whenever seam
 # vertices cross the Weld threshold. Keep it out of viewport playback so frame
@@ -161,7 +164,7 @@ HEM_DRAG_START = 17
 HEM_DRAG_END = 40
 HEM_LEVEL_START = 31
 HEM_LEVEL_END = 44
-HEM_DRAG_SETTLE_END = 74
+HEM_DRAG_SETTLE_END = 49
 HEM_EQUAL_HEIGHT_TOLERANCE_MM = 20.0
 ENABLE_HEM_HEIGHT_FEEDBACK = False
 HEM_HEIGHT_FEEDBACK_GAIN = 0.5
@@ -1033,7 +1036,7 @@ def configure_sewing_force_driver(obj, modifier):
 
 
 def configure_bending_stiffness_driver(obj, modifier):
-    """Keep curved panels pliable while sewing, then restore denim bending."""
+    """Keep panels sewable initially, then restore structured-cover bending."""
 
     settings = modifier.settings
     settings.driver_remove("bending_stiffness")
@@ -2577,7 +2580,7 @@ def apply_preset(obj, measured_difference_mm=None):
     settings.mass = MASS_PER_VERTEX
     settings.air_damping = AIR_DAMPING
 
-    # Keep in-plane stiffness while reducing bending resistance and damping.
+    # Structured-cover preset: resist stretch, shear and folds more strongly.
     # Mass is retained for comparison; this is not a calibrated fabric model.
     settings.tension_stiffness = TENSION_STIFFNESS
     settings.compression_stiffness = COMPRESSION_STIFFNESS
@@ -2721,10 +2724,12 @@ def apply_preset(obj, measured_difference_mm=None):
 
 
 
-# Late-stage soft pin spring targets. All semantic HEM vertices share a plane.
-ENABLE_HEM_LEVEL_FEEDBACK = True
-HEM_FEEDBACK_START = 44
-HEM_FEEDBACK_RAMP = 20
+# Optional late-stage HEM leveling is deliberately off in the 50-frame preset:
+# it requires a complete trajectory resample and per-frame shape keys.  Keep
+# the cleanup-capable implementation below so rerunning V29 removes V28 data.
+ENABLE_HEM_LEVEL_FEEDBACK = False
+HEM_FEEDBACK_START = 0
+HEM_FEEDBACK_RAMP = 0
 HEM_FEEDBACK_TARGET_Z = None  # Metres; None captures the global HEM mean once.
 HEM_FEEDBACK_LIMIT_MM = 350.0
 HEM_LIVE_KEY = "CC_HEM_LIVE_LEVEL"
@@ -2998,9 +3003,8 @@ def main():
         )
 
     print("")
-    print("V28: frames 45-65 ramp soft HEM pin springs to one world-Z plane; hold through 75.")
+    print("V29: 50-frame simplified sew/drape; late HEM trajectory sampling is disabled.")
     print("Clear Cloth cache and replay sequentially from Scene Start. Rerun after geometry changes.")
-    print("HEM targets use sampled per-vertex Z; collision and finishing modifiers stay active.")
 
 
 

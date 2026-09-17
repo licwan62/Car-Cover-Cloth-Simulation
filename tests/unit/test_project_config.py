@@ -59,7 +59,7 @@ class ProjectConfigTests(unittest.TestCase):
             if isinstance(node, ast.Import)
             for alias in node.names
         }
-        self.assertEqual(imported_modules, {"bpy"})
+        self.assertEqual(imported_modules, {"bpy", "re"})
         self.assertNotIn("project_config", source)
         self.assertNotIn(".keyframe_insert(", source)
         self.assertIn("bpy.app.handlers.frame_change_pre", source)
@@ -88,16 +88,11 @@ class ProjectConfigTests(unittest.TestCase):
                 except (ValueError, TypeError):
                     pass
 
-        self.assertEqual(constants["PRESET_NAME"], "CarCover_HemFeedback_75F_V28")
-        self.assertEqual(constants["SIMULATION_END_OFFSET"], 74)
-        self.assertTrue(constants["ENABLE_HEM_LEVEL_FEEDBACK"])
+        self.assertEqual(constants["PRESET_NAME"], "CarCover_Simplified_50F_V29")
+        self.assertEqual(constants["SIMULATION_END_OFFSET"], 49)
+        self.assertFalse(constants["ENABLE_HEM_LEVEL_FEEDBACK"])
         self.assertFalse(constants["ENABLE_HEM_DRAG"])
         self.assertTrue(constants["ENABLE_POST_CLOTH_SEAM_WELD"])
-        self.assertLess(constants["ROOF_PIN_RELEASE_END"], constants["HEM_FEEDBACK_START"])
-        self.assertLess(constants["HEM_FEEDBACK_START"] + constants["HEM_FEEDBACK_RAMP"],
-                        constants["SIMULATION_END_OFFSET"])
-        self.assertGreater(constants["HEM_LEVEL_PIN_WEIGHT"], 0)
-        self.assertLess(constants["HEM_LEVEL_PIN_WEIGHT"], 1)
         self.assertTrue(constants["ENABLE_SELF_COLLISION"])
         self.assertTrue(constants["ENABLE_OBJECT_COLLISION"])
 

@@ -118,6 +118,17 @@ def parse_path(data):
 
 def contour(element):
     kind = element.tag.rsplit("}", 1)[-1]
+    if kind == "g":
+        # Illustrator often preserves a named PANEL layer as a group that
+        # contains its single outline path.  Treat that wrapper as the panel
+        # geometry, while rejecting compound/multiple-outline panels because
+        # the sewing partitioner needs one closed contour.
+        children = list(element)
+        if len(children) != 1:
+            raise ValueError("PANEL group must contain exactly one outline")
+        if children[0].get("transform"):
+            raise ValueError("Apply SVG transforms before conversion")
+        return contour(children[0])
     if kind == "path":
         return parse_path(element.get("d", ""))
     if kind == "rect":
@@ -128,6 +139,38 @@ def contour(element):
             raise ValueError("PANEL rectangle has invalid dimensions")
         return parse_path(f"M{x},{y}h{w}v{h}h{-w}Z")
     raise ValueError(f"Unsupported PANEL geometry: {kind}")
+
+
+def assign_panel_ids_by_y(root):
+    """Assign LEFT/TOP/RIGHT to exactly three panel outlines by vertical order.
+
+    This supports flat SVG exports where Illustrator has lost the semantic
+    layer names but retained the usual horizontal layout: upper side panel,
+    centre roof panel, lower side panel.  SVG Y increases downward.
+    """
+    candidates = []
+    for element in root.iter():
+        if element.tag.rsplit("}", 1)[-1] not in {"path", "rect"}:
+            continue
+        segments = contour(element)
+        points = [point for start, end, controls in segments
+                  for point in (start, end, *(controls or ()))]
+        low = min(point[1] for point in points)
+        high = max(point[1] for point in points)
+        candidates.append(((low + high) / 2.0, element))
+    if len(candidates) != 3:
+        raise ValueError(
+            "Vertical semantic assignment requires exactly three path/rect "
+            f"outlines; found {len(candidates)}"
+        )
+    candidates.sort(key=lambda item: item[0])
+    for name, (_center_y, element) in zip(
+        ("PANEL_LEFT", "PANEL_TOP", "PANEL_RIGHT"), candidates
+    ):
+        element.set("id", name)
+    return {name: center_y for name, (center_y, _element) in zip(
+        ("PANEL_LEFT", "PANEL_TOP", "PANEL_RIGHT"), candidates
+    )}
 
 
 def path_data(segments, closed=False):
@@ -246,7 +289,16 @@ def convert_tree(root, front="right"):
             "stroke-width": "3", "stroke-linecap": "square", "stroke-linejoin": "round",
         })
 
-    for name, segments in panels.items():
+    # Preserve the flat-pattern reading order in the exported PANEL layer:
+    # upper side, centre roof, lower side.  This makes semantic inspection in
+    # Illustrator/Blender agree with SVG's increasing-downward Y axis.
+    def vertical_center(segments):
+        points = [point for start, end, controls in segments
+                  for point in (start, end, *(controls or ()))]
+        return (min(point[1] for point in points) +
+                max(point[1] for point in points)) / 2.0
+
+    for name, segments in sorted(panels.items(), key=lambda item: vertical_center(item[1])):
         add("PANEL", name, segments, True)
     for side, seam_id in (("LEFT", "S001"), ("RIGHT", "S002")):
         seam, hem = split_panel(panels[f"PANEL_{side}"])

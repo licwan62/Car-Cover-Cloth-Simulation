@@ -1,0 +1,20 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="10000mm" height="7070.7mm" viewBox="0 0 2834.65 2004.29">
+  <g id="PANEL">
+    <path id="PANEL_RIGHT" d="M2208.54,1694.11 L734.63,1694.11 L734.63,1495.43 C734.63,1454.76 777.92,1405.6 818.27,1397.8 C863.96,1388.96 1120.56,1325.61 1191.59,1325.61 C1254.67,1325.61 1479.44,1325.61 1532.7,1325.61 C1591.54,1325.61 1758.9,1394.76 1825.74,1410.59 C1883.45,1424.26 1919.82,1429.43 2047.02,1445.07 C2174.23,1460.71 2208.65,1505.96 2208.65,1551.05 L2208.54,1694.1 L2208.54,1694.11 Z" fill="none" stroke="#39b54a" stroke-width="3" stroke-linecap="square" stroke-linejoin="round" />
+    <path id="PANEL_LEFT" d="M2208.54,310.19 L734.63,310.19 L734.63,508.87 C734.63,549.54 777.92,598.7 818.27,606.5 C863.96,615.34 1120.56,678.69 1191.59,678.69 C1254.67,678.69 1479.44,678.69 1532.7,678.69 C1591.54,678.69 1758.9,609.54 1825.74,593.71 C1883.45,580.04 1919.82,574.87 2047.02,559.23 C2174.23,543.59 2208.65,498.34 2208.65,453.25 L2208.54,310.2 L2208.54,310.19 Z" fill="none" stroke="#39b54a" stroke-width="3" stroke-linecap="square" stroke-linejoin="round" />
+    <path id="PANEL_TOP" d="M446.46,789.55 L2388.19,789.55 L2388.19,1214.75 L446.46,1214.75 L446.46,789.55 Z" fill="none" stroke="#39b54a" stroke-width="3" stroke-linecap="square" stroke-linejoin="round" />
+  </g>
+  <g id="SEAM">
+    <path id="S001_LEFT" d="M734.63,310.19 L734.63,508.87 C734.63,549.54 777.92,598.7 818.27,606.5 C863.96,615.34 1120.56,678.69 1191.59,678.69 C1254.67,678.69 1479.44,678.69 1532.7,678.69 C1591.54,678.69 1758.9,609.54 1825.74,593.71 C1883.45,580.04 1919.82,574.87 2047.02,559.23 C2174.23,543.59 2208.65,498.34 2208.65,453.25 L2208.54,310.2 L2208.54,310.19" fill="none" stroke="#c1272d" stroke-width="3" stroke-linecap="square" stroke-linejoin="round" />
+    <path id="S002_RIGHT" d="M734.63,1694.11 L734.63,1495.43 C734.63,1454.76 777.92,1405.6 818.27,1397.8 C863.96,1388.96 1120.56,1325.61 1191.59,1325.61 C1254.67,1325.61 1479.44,1325.61 1532.7,1325.61 C1591.54,1325.61 1758.9,1394.76 1825.74,1410.59 C1883.45,1424.26 1919.82,1429.43 2047.02,1445.07 C2174.23,1460.71 2208.65,1505.96 2208.65,1551.05 L2208.54,1694.1 L2208.54,1694.11" fill="none" stroke="#c1272d" stroke-width="3" stroke-linecap="square" stroke-linejoin="round" />
+    <path id="S001_TOP" d="M446.46,789.55 L2388.19,789.55" fill="none" stroke="#c1272d" stroke-width="3" stroke-linecap="square" stroke-linejoin="round" />
+    <path id="S002_TOP" d="M446.46,1214.75 L2388.19,1214.75" fill="none" stroke="#c1272d" stroke-width="3" stroke-linecap="square" stroke-linejoin="round" />
+  </g>
+  <g id="HEM">
+    <path id="HEM_LEFT" d="M2208.54,310.19 L734.63,310.19" fill="none" stroke="blue" stroke-width="3" stroke-linecap="square" stroke-linejoin="round" />
+    <path id="HEM_RIGHT" d="M2208.54,1694.11 L734.63,1694.11" fill="none" stroke="blue" stroke-width="3" stroke-linecap="square" stroke-linejoin="round" />
+    <path id="HEM_TOP_REAR" d="M446.46,1214.75 L446.46,789.55" fill="none" stroke="blue" stroke-width="3" stroke-linecap="square" stroke-linejoin="round" />
+    <path id="HEM_TOP_FRONT" d="M2388.19,789.55 L2388.19,1214.75" fill="none" stroke="blue" stroke-width="3" stroke-linecap="square" stroke-linejoin="round" />
+  </g>
+</svg>
