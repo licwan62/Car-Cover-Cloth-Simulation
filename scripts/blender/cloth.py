@@ -92,7 +92,7 @@ ROOF_PIN_RELEASE_END = 29
 SHADE_SMOOTH = True
 ENABLE_DISPLAY_SUBSURF = True
 
-# Seam preview. As with setup_mirror_markers.py, semantic seam groups are
+# Seam preview. As with mirror_markers.py, semantic seam groups are
 # visualised by assigning a high-contrast material to existing cloth faces.
 # This follows Cloth deformation and adds no solve geometry or constraints.
 ENABLE_SEAM_TEXTURE = True

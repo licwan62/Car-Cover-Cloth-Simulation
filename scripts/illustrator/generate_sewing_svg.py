@@ -258,6 +258,18 @@ def split_panel(segments, top=False):
 def convert_tree(root, front="right"):
     if front not in {"left", "right"}:
         raise ValueError("front must be left or right")
+
+    # Flat Illustrator SVG exports may only contain three anonymous outlines.
+    # Restore their semantic names from the established vertical layout before
+    # collecting panels.  Keep explicitly named inputs untouched so a named
+    # PANEL group and its child path cannot be counted twice.
+    panel_ids = {
+        element.get("id") for element in root.iter()
+        if element.get("id", "").startswith("PANEL_")
+    }
+    if not panel_ids:
+        assign_panel_ids_by_y(root)
+
     panels = {}
 
     def visit(element, transformed=False):

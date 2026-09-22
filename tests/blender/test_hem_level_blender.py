@@ -1,7 +1,7 @@
 """Run with Blender --background --factory-startup --python this_file."""
 from pathlib import Path
 import bpy, runpy
-ns=runpy.run_path(str(Path(__file__).resolve().parents[2] / 'scripts/blender/setup_cloth.py'),run_name='preset_test')
+ns=runpy.run_path(str(Path(__file__).resolve().parents[2] / 'scripts/blender/cloth.py'),run_name='preset_test')
 bpy.ops.object.select_all(action='SELECT'); bpy.ops.object.delete(use_global=False)
 bpy.ops.mesh.primitive_grid_add(x_subdivisions=9,y_subdivisions=9,size=2)
 obj=bpy.context.object

@@ -45,15 +45,15 @@ Blender regression check (synthetic meshes, no existing scene edits):
 | `config_driven/generate_cloth_mesh.py` | Uniform sampling and constrained Delaunay mesh | Migrated existing implementation |
 | `config_driven/generate_sewing.py` | Select seam paths and create Sewing Springs | Semantic ID pairing, A/B direction and legacy fallback integrated |
 | `generate_sewing.py` | Build Sewing directly from a semantic SVG | Creates PANEL/SEAM/HEM and automatic A/B vertex groups, then arc-length-matched loose edges without project imports |
-| `config_driven/setup_cloth.py` | Apply Oxford cloth settings | Config-driven SmoothDrape V2 preset |
-| `setup_cloth.py` | Apply the self-contained HemFeedback 75F V28 preset | Late per-vertex animated soft pin springs, object/self collision, and seam material |
-| `config_driven/setup_mirror_markers.py` | Add left/right mirror-position comparison marks | Config-driven, non-physical face-material marks based on TESLA-MODELX.ai artboard 1 |
-| `setup_mirror_markers.py` | Add the same mirror-position marks without project dependencies | Opens an interactive `MARKER_CONFIG` dialog before applying non-physical marks at the settled frame |
+| `config_driven/cloth.py` | Apply Oxford cloth settings | Config-driven SmoothDrape V2 preset |
+| `cloth.py` | Apply the self-contained HemFeedback 75F V28 preset | Late per-vertex animated soft pin springs, object/self collision, and seam material |
+| `config_driven/mirror_markers.py` | Add left/right mirror-position comparison marks | Config-driven, non-physical face-material marks based on TESLA-MODELX.ai artboard 1 |
+| `mirror_markers.py` | Add the same mirror-position marks without project dependencies | Opens an interactive `MARKER_CONFIG` dialog before applying non-physical marks at the settled frame |
 | `config_driven/generate_collision_proxy.py` | Generate a smooth vehicle Collision Proxy | Reads `config/simulation.json`; delegates geometry work to the matching self-contained implementation |
 | `generate_collision_proxy.py` | Generate the same Collision Proxy without project dependencies | Embedded FastCollisionShell V5 settings; original evaluated topology, zero-or-one rear-wing support, optional voxel remesh, 18k-triangle collision budget, source-bounds correction, and Collision physics |
 | `generate_collision_shell.py` | Test a two-stage collision-shell workflow | Creates a 35 mm inspection Outer Shell, extracts a 50 mm/6k-triangle Collision only from that shell, restores source bounds, and runs lightweight geometry/silhouette checks |
 | `generate_collision_exterior.py` | Build an exterior-only drape collider | Six-direction first-hit envelope, gap closing, cavity/island removal, and closed-manifold validation; source topology is never decimated |
-| `setup_cloth_fit_test.py` | Apply a lightweight Cloth preset | Quick car-cover fit test with embedded settings |
+| `cloth_fit_test.py` | Apply a lightweight Cloth preset | Quick car-cover fit test with embedded settings |
 | `svg_cloth_workflow.py` | Import a semantic SVG and run the complete cloth pipeline | One file dialog; joins PANEL curves, remeshes, generates Sewing, and applies the embedded cloth preset |
 | `export_three_views.py` | Real-size three-view SVG/PNG export | Auxiliary reporting tool |
 | `export_six_views.py` | Four orthographic views and two perspective views | Six PNGs and an embedded SVG atlas; self-contained |
@@ -91,7 +91,7 @@ shell for Fit metrics.
 ## Self-contained selection order
 
 `generate_collision_proxy.py` leaves the generated proxy selected so
-it can be inspected. Before running `setup_cloth.py`, select the
+it can be inspected. Before running `cloth.py`, select the
 actual car-cover mesh; selecting the proxy as well is harmless because the cloth
 script recognizes and skips meshes with Collision physics. Collider activation
 no longer depends on `CC_COLLISION_PROXY` or any other collection name. Every
@@ -187,7 +187,7 @@ Artboard 1 of `illustrator/TESLA-MODELX.ai` places the mirror-pocket center
 1600 mm behind the front-bottom endpoint and 1020 mm above it. The left-side
 charge-port center is 340 mm from the rear-bottom endpoint and 820 mm above it.
 At the settled comparison frame, activate the Cloth mesh and run
-`config_driven/setup_mirror_markers.py`. The evaluated `PANEL_LEFT` and `PANEL_RIGHT` vertex
+`config_driven/mirror_markers.py`. The evaluated `PANEL_LEFT` and `PANEL_RIGHT` vertex
 groups provide separate side-panel coordinate references, so `PANEL_TOP` and
 vehicle Collision bounds cannot shift the marks. The script paints
 small left/right mirror marks orange-red and the left charge-port mark blue. It does not create a mirror-pocket
@@ -209,7 +209,7 @@ Open `svg_cloth_workflow.py` in Blender's Text Editor and click **Run Script**.
 Choose the semantic `_sewing.svg` file in the file dialog. The operator imports
 and joins only the curves inside the SVG `PANEL` group, creates the cloth mesh
 with `remesh.py`, generates semantic sewing from the same source file, and then
-applies `setup_cloth.py`. Existing vehicle Collision objects remain in the scene
+applies `cloth.py`. Existing vehicle Collision objects remain in the scene
 and are discovered by the cloth setup as usual. This is a single-file standalone
 script: it can also be pasted into an unsaved Blender Text block and does not
 need access to the repository or neighboring Python files. After changing one

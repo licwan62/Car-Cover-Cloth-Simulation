@@ -105,6 +105,22 @@ class SewingSVGTests(unittest.TestCase):
         ]
         self.assertEqual(sorted(segment_counts), [1, 3])
 
+    def test_anonymous_panels_are_named_by_vertical_position(self):
+        root = ET.fromstring("""
+            <svg xmlns="http://www.w3.org/2000/svg">
+              <path d="M0 0H100L90 20H10Z"/>
+              <path d="M0 40V50H100V40Z"/>
+              <path d="M0 70H100L90 90H10Z"/>
+            </svg>
+        """)
+
+        svg.convert_tree(root)
+
+        self.assertEqual(
+            [element.get("id") for element in root],
+            ["PANEL_LEFT", "PANEL_TOP", "PANEL_RIGHT"],
+        )
+
     def test_smooth_curve_reflects_control_and_roundtrips(self):
         segments = svg.parse_path("M0 0 C1 0 2 1 3 1 s2 1 3 0 L0 0Z")
         self.assertEqual(segments[1], ((3., 1.), (6., 1.), ((4., 1.), (5., 2.))))

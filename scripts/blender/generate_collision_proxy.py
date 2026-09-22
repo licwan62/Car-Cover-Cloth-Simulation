@@ -1206,7 +1206,7 @@ def main():
         print(f"Created: {proxy.name}")
         print(
             "Next: this proxy is selected for inspection. Before running "
-            "setup_cloth.py, select only the actual car-cover "
+            "cloth.py, select only the actual car-cover "
             "mesh; never apply Cloth to this proxy."
         )
         print("=" * 64)

@@ -1055,7 +1055,7 @@ def main():
     # Keep the generated shells beside the logical target, in a collection
     # whose name matches the active source object (or the first valid source
     # when no selected source is active). The collection is organizational;
-    # setup_cloth allows Collision objects from every scene collection.
+    # cloth allows Collision objects from every scene collection.
     collection = ensure_collection(bpy.context.scene, base_name)
     work_objects = []
     outer_shell = None

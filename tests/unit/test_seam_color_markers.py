@@ -8,7 +8,7 @@ import unittest
 
 class SeamColorMarkerTests(unittest.TestCase):
     def setUp(self):
-        path = Path(__file__).resolve().parents[2] / "scripts/blender/setup_cloth.py"
+        path = Path(__file__).resolve().parents[2] / "scripts/blender/cloth.py"
         tree = ast.parse(path.read_text(encoding="utf-8"))
         wanted = {"is_semantic_seam_group", "semantic_seam_faces"}
         nodes = [

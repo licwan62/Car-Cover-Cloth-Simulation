@@ -49,7 +49,7 @@ class ProjectConfigTests(unittest.TestCase):
 
     def test_standalone_denim_preset_is_self_contained(self) -> None:
         cloth = load_cloth_preset()
-        path = PROJECT_ROOT / "scripts" / "blender" / "setup_cloth.py"
+        path = PROJECT_ROOT / "scripts" / "blender" / "cloth.py"
         source = path.read_text(encoding="utf-8")
         tree = ast.parse(source)
 

@@ -13,7 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from project_config import load_json
-from scripts.blender.setup_mirror_markers import apply_mirror_markers
+from scripts.blender.mirror_markers import apply_mirror_markers
 
 
 CONFIG = load_json("simulation.json")["mirror_markers"]

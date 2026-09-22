@@ -23,9 +23,9 @@ doc/AGENT.md            完整设计依据
 1. `config_driven/repair_boundary.py`：修复 SVG 转 Mesh 后的开放边界。
 2. `config_driven/generate_cloth_mesh.py`：生成约 50 mm 的约束 Delaunay Cloth Mesh。
 3. `generate_sewing.py`：按语义 Sewing ID 配对并生成 Loose Edge。
-4. `setup_cloth.py`：应用 `Oxford_210D_SmoothDrape_V2` 配置。
+4. `cloth.py`：应用 `Oxford_210D_SmoothDrape_V2` 配置。
 5. `export_three_views.py`：导出真实尺寸三视图报告（辅助工具）。
-6. `setup_mirror_markers.py`：在最终落罩帧添加后视镜耳位和充电口位置标记。
+6. `mirror_markers.py`：在最终落罩帧添加后视镜耳位和充电口位置标记。
 
 脚本位于 `scripts/blender/`。其中几何脚本会直接修改当前 Blender 场景；请在副本场景中先验证。
 
@@ -64,7 +64,7 @@ S001_LEFT_B
 
 ### 当前标记代表什么
 
-`setup_mirror_markers.py` 不生成真实的后视镜耳袋或充电口结构，也不修改
+`mirror_markers.py` 不生成真实的后视镜耳袋或充电口结构，也不修改
 Cloth 物理。它在已经落到车辆上的车罩三角面中查找版型坐标附近的面，给这些
 完整三角面分配高对比材质：
 
@@ -102,7 +102,7 @@ Blender Z。脚本不是直接把二维数值写入 Blender X/Y。
 
 ### 配置版如何读取参数
 
-项目内运行 [setup_mirror_markers.py](scripts/blender/config_driven/setup_mirror_markers.py) 时，
+项目内运行 [mirror_markers.py](scripts/blender/config_driven/mirror_markers.py) 时，
 读取 `config/simulation.json` 的 `mirror_markers` 段，然后把完整配置传给公共执行
 函数。修改 JSON 后重新运行脚本即可生效：
 
@@ -138,7 +138,7 @@ Blender Z。脚本不是直接把二维数值写入 Blender X/Y。
 
 ### 独立运行 版如何读取参数
 
-[setup_mirror_markers.py](scripts/blender/setup_mirror_markers.py)
+[mirror_markers.py](scripts/blender/mirror_markers.py)
 不读取 JSON，也不导入项目模块。它使用文件顶部内嵌的 `MARKER_CONFIG` 作为
 交互窗口默认值，方便将整个脚本复制进 `.blend` 的 Text Editor。运行脚本会先
 打开“车罩耳位 / 充电口标记”窗口；可在窗口中修改车头方向、两组中心坐标、
@@ -149,11 +149,11 @@ Blender Z。脚本不是直接把二维数值写入 Blender X/Y。
 两个入口最终都调用 `apply_mirror_markers()`：
 
 ```text
-setup_mirror_markers.py
+mirror_markers.py
   -> 读取 config/simulation.json
   -> apply_mirror_markers(config=CONFIG)
 
-setup_mirror_markers.py
+mirror_markers.py
   -> 使用内嵌 MARKER_CONFIG 生成交互窗口默认值
   -> 用户在窗口确认或修改参数
   -> apply_mirror_markers(config=交互参数)

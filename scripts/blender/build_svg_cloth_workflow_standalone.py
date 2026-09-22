@@ -1,7 +1,7 @@
 """Refresh embedded dependencies in svg_cloth_workflow.py.
 
 This is a repository maintenance tool, not a Blender script. Run it whenever
-remesh.py, generate_sewing.py, or setup_cloth.py changes.
+remesh.py, generate_sewing.py, or cloth.py changes.
 """
 
 import base64
@@ -26,7 +26,8 @@ def encode(filepath):
 def main():
     source = TARGET.read_text(encoding="utf-8")
     for filename, initial_placeholder in DEPENDENCIES.items():
-        payload = encode(ROOT / filename)
+        source_name = "cloth.py" if filename == "setup_cloth.py" else filename
+        payload = encode(ROOT / source_name)
         pattern = rf'("{re.escape(filename)}": ")([^"\r\n]*)(")'
         source, count = re.subn(pattern, rf"\g<1>{payload}\g<3>", source, count=1)
         if count != 1:
