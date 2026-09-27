@@ -144,33 +144,45 @@ def contour(element):
 def assign_panel_ids_by_y(root):
     """Assign LEFT/TOP/RIGHT to exactly three panel outlines by vertical order.
 
-    This supports flat SVG exports where Illustrator has lost the semantic
-    layer names but retained the usual horizontal layout: upper side panel,
-    centre roof panel, lower side panel.  SVG Y increases downward.
+    This supports flat SVG exports where Illustrator has lost some or all of
+    the semantic layer names but retained the usual horizontal layout: upper
+    side panel, centre roof panel, lower side panel.  SVG Y increases
+    downward.  An already named PANEL_* element counts as one outline (its
+    children are not candidates) and must agree with its vertical position.
     """
     candidates = []
-    for element in root.iter():
-        if element.tag.rsplit("}", 1)[-1] not in {"path", "rect"}:
-            continue
-        segments = contour(element)
-        points = [point for start, end, controls in segments
-                  for point in (start, end, *(controls or ()))]
-        low = min(point[1] for point in points)
-        high = max(point[1] for point in points)
-        candidates.append(((low + high) / 2.0, element))
+
+    def visit(element):
+        kind = element.tag.rsplit("}", 1)[-1]
+        named = element.get("id", "").startswith("PANEL_")
+        if named or kind in {"path", "rect"}:
+            segments = contour(element)
+            points = [point for start, end, controls in segments
+                      for point in (start, end, *(controls or ()))]
+            low = min(point[1] for point in points)
+            high = max(point[1] for point in points)
+            candidates.append(((low + high) / 2.0, element))
+            return
+        for child in element:
+            visit(child)
+
+    visit(root)
     if len(candidates) != 3:
         raise ValueError(
             "Vertical semantic assignment requires exactly three path/rect "
             f"outlines; found {len(candidates)}"
         )
     candidates.sort(key=lambda item: item[0])
-    for name, (_center_y, element) in zip(
-        ("PANEL_LEFT", "PANEL_TOP", "PANEL_RIGHT"), candidates
-    ):
+    names = ("PANEL_LEFT", "PANEL_TOP", "PANEL_RIGHT")
+    for name, (_center_y, element) in zip(names, candidates):
+        existing = element.get("id", "")
+        if existing.startswith("PANEL_") and existing != name:
+            raise ValueError(
+                f"{existing} is positioned where {name} is expected"
+            )
+    for name, (_center_y, element) in zip(names, candidates):
         element.set("id", name)
-    return {name: center_y for name, (center_y, _element) in zip(
-        ("PANEL_LEFT", "PANEL_TOP", "PANEL_RIGHT"), candidates
-    )}
+    return {name: center_y for name, (center_y, _element) in zip(names, candidates)}
 
 
 def path_data(segments, closed=False):
@@ -255,19 +267,35 @@ def split_panel(segments, top=False):
     return [left_to_right(chain) for chain in chains], hems
 
 
-def convert_tree(root, front="right"):
+def physical_size(root, scale=10.0):
+    """Return SVG width/height, deriving 1:1 millimetres when absent.
+
+    Illustrator SVG exports (responsive option) keep only the viewBox in
+    points and drop the Large Canvas scaleFactor.  Mirror read_panel.jsx:
+    millimetres = points * scaleFactor * 25.4 / 72.
+    """
+    if root.get("width") and root.get("height"):
+        return {"width": root.get("width"), "height": root.get("height")}
+    view_box = root.get("viewBox")
+    if not view_box:
+        return {}
+    _x, _y, width, height = (float(value) for value in view_box.replace(",", " ").split())
+    return {key: f"{value * scale * 25.4 / 72:.2f}".rstrip("0").rstrip(".") + "mm"
+            for key, value in (("width", width), ("height", height))}
+
+
+def convert_tree(root, front="right", scale=10.0):
     if front not in {"left", "right"}:
         raise ValueError("front must be left or right")
 
-    # Flat Illustrator SVG exports may only contain three anonymous outlines.
-    # Restore their semantic names from the established vertical layout before
-    # collecting panels.  Keep explicitly named inputs untouched so a named
-    # PANEL group and its child path cannot be counted twice.
+    # Flat Illustrator SVG exports may lose some or all semantic names.
+    # Restore missing names from the established vertical layout before
+    # collecting panels.  Fully named inputs are left untouched.
     panel_ids = {
         element.get("id") for element in root.iter()
         if element.get("id", "").startswith("PANEL_")
     }
-    if not panel_ids:
+    if not {"PANEL_TOP", "PANEL_LEFT", "PANEL_RIGHT"} <= panel_ids:
         assign_panel_ids_by_y(root)
 
     panels = {}
@@ -289,8 +317,8 @@ def convert_tree(root, front="right"):
     visit(root)
     if set(panels) != {"PANEL_TOP", "PANEL_LEFT", "PANEL_RIGHT"}:
         raise ValueError("Input requires PANEL_TOP, PANEL_LEFT and PANEL_RIGHT")
-    output = ET.Element(f"{{{SVG}}}svg", {k: v for k, v in root.attrib.items()
-                                        if k in {"width", "height", "viewBox", "version"}})
+    attributes = {k: v for k, v in root.attrib.items() if k in {"viewBox", "version"}}
+    output = ET.Element(f"{{{SVG}}}svg", {**physical_size(root, scale), **attributes})
     groups = {name: ET.SubElement(output, f"{{{SVG}}}g", id=name)
               for name in ("PANEL", "SEAM", "HEM")}
 
@@ -367,7 +395,7 @@ def default_output(source):
     return OUTPUT_DIR / parent / (source.stem + "_sewing.svg")
 
 
-def convert_file(source, destination=None, front="right"):
+def convert_file(source, destination=None, front="right", scale=10.0):
     source = Path(source)
     destination = Path(destination) if destination else default_output(source)
     if source.resolve() == destination.resolve():
@@ -375,7 +403,7 @@ def convert_file(source, destination=None, front="right"):
     if destination.exists():
         raise FileExistsError(f"Output already exists: {destination}")
     root = read_ai(source) if source.suffix.lower() == ".ai" else ET.parse(source).getroot()
-    output = convert_tree(root, front)
+    output = convert_tree(root, front, scale)
     ET.register_namespace("", SVG)
     ET.indent(output, space="  ")
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -391,6 +419,9 @@ def main():
     parser.add_argument("-o", "--output")
     parser.add_argument("--front", choices=("left", "right"), default="right",
                         help="Car front in the flat SVG (default: right, as in Tesla reference)")
+    parser.add_argument("--scale", type=float, default=10.0,
+                        help="Illustrator scaleFactor for SVG input without width/height "
+                             "(default: 10, Large Canvas; 1 for a normal document)")
     args = parser.parse_args()
     if not args.input:
         from tkinter import Tk, filedialog
@@ -414,7 +445,7 @@ def main():
     results = []
     for source in sources:
         try:
-            output = convert_file(source, args.output, args.front)
+            output = convert_file(source, args.output, args.front, args.scale)
         except (ValueError, OSError, ET.ParseError) as error:
             results.append(dict(source=str(source), status="failed", error=str(error)))
             print(f"FAILED {source.name}: {error}", flush=True)

@@ -121,6 +121,43 @@ class SewingSVGTests(unittest.TestCase):
             ["PANEL_LEFT", "PANEL_TOP", "PANEL_RIGHT"],
         )
 
+    def test_partially_named_panels_fill_missing_by_vertical_position(self):
+        root = ET.fromstring("""
+            <svg xmlns="http://www.w3.org/2000/svg">
+              <path d="M0 70H100L90 90H10Z"/>
+              <path d="M0 0H100L90 20H10Z"/>
+              <g id="PANEL_TOP"><path d="M0 40V50H100V40Z"/></g>
+            </svg>
+        """)
+
+        svg.convert_tree(root)
+
+        self.assertEqual(
+            [element.get("id") for element in root],
+            ["PANEL_RIGHT", "PANEL_LEFT", "PANEL_TOP"],
+        )
+        self.assertIsNone(root[2][0].get("id"))
+
+    def test_viewbox_only_svg_gets_large_canvas_millimetres(self):
+        root = ET.fromstring('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2834.645669 72"/>')
+        self.assertEqual(svg.physical_size(root), {"width": "10000mm", "height": "254mm"})
+        self.assertEqual(svg.physical_size(root, 1)["height"], "25.4mm")
+        root.set("width", "5m")
+        root.set("height", "1m")
+        self.assertEqual(svg.physical_size(root), {"width": "5m", "height": "1m"})
+
+    def test_partially_named_panel_in_wrong_position_fails(self):
+        root = ET.fromstring("""
+            <svg xmlns="http://www.w3.org/2000/svg">
+              <g id="PANEL_TOP"><path d="M0 0H100L90 20H10Z"/></g>
+              <path d="M0 40V50H100V40Z"/>
+              <path d="M0 70H100L90 90H10Z"/>
+            </svg>
+        """)
+
+        with self.assertRaisesRegex(ValueError, "PANEL_TOP is positioned"):
+            svg.convert_tree(root)
+
     def test_smooth_curve_reflects_control_and_roundtrips(self):
         segments = svg.parse_path("M0 0 C1 0 2 1 3 1 s2 1 3 0 L0 0Z")
         self.assertEqual(segments[1], ((3., 1.), (6., 1.), ((4., 1.), (5., 2.))))
