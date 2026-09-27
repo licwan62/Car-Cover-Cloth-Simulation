@@ -16,6 +16,7 @@ blender/*
 
 # Blender binaries are kept locally.
 *.blend
+*.blend@
 
 # Adobe Illustrator source files are kept locally.
 *.ai
