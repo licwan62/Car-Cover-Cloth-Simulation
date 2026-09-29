@@ -13,7 +13,7 @@ import bpy
 from mathutils import Matrix, Vector
 
 
-# 与 export_three_views.py 相同：Z 为高，X/Y 中较长的轴为车长。
+# 与 300_export_three_views.py 相同：Z 为高，X/Y 中较长的轴为车长。
 # 若前后/左右方向不符，分别翻转对应 SIGN。
 LEFT_SIGN = -1
 FRONT_SIGN = -1

@@ -1,7 +1,8 @@
-"""Refresh embedded dependencies in svg_cloth_workflow.py.
+"""Refresh embedded dependencies in scripts/blender/000_svg_to_cloth.py.
 
-This is a repository maintenance tool, not a Blender script. Run it whenever
-remesh.py, generate_sewing.py, or cloth.py changes.
+This is a repository maintenance tool, not a Blender script. Run it with a
+regular Python interpreter whenever 001_remesh.py, 002_sew_from_svg.py, or
+003_cloth_setup.py changes.
 """
 
 import base64
@@ -10,13 +11,9 @@ import re
 import zlib
 
 
-ROOT = Path(__file__).resolve().parent
-TARGET = ROOT / "svg_cloth_workflow.py"
-DEPENDENCIES = {
-    "remesh.py": "__REMESH_PAYLOAD__",
-    "generate_sewing.py": "__SEWING_PAYLOAD__",
-    "setup_cloth.py": "__CLOTH_PAYLOAD__",
-}
+BLENDER_SCRIPTS = Path(__file__).resolve().parents[1] / "blender"
+TARGET = BLENDER_SCRIPTS / "000_svg_to_cloth.py"
+DEPENDENCIES = ("001_remesh.py", "002_sew_from_svg.py", "003_cloth_setup.py")
 
 
 def encode(filepath):
@@ -25,9 +22,8 @@ def encode(filepath):
 
 def main():
     source = TARGET.read_text(encoding="utf-8")
-    for filename, initial_placeholder in DEPENDENCIES.items():
-        source_name = "cloth.py" if filename == "setup_cloth.py" else filename
-        payload = encode(ROOT / source_name)
+    for filename in DEPENDENCIES:
+        payload = encode(BLENDER_SCRIPTS / filename)
         pattern = rf'("{re.escape(filename)}": ")([^"\r\n]*)(")'
         source, count = re.subn(pattern, rf"\g<1>{payload}\g<3>", source, count=1)
         if count != 1:

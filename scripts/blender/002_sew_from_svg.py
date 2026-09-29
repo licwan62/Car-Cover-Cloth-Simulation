@@ -222,7 +222,7 @@ def _boundary_data(mesh):
         if not mesh.polygons:
             raise RuntimeError(
                 f"活动 Mesh 没有面（vertices={len(mesh.vertices)}, edges={len(mesh.edges)}）；"
-                "它可能是 SVG 轮廓或 SEAM 线框。请选中 remesh.py 生成的 "
+                "它可能是 SVG 轮廓或 SEAM 线框。请选中 001_remesh.py 生成的 "
                 "*_CLOTH_* 三角网格。"
             )
         raise RuntimeError(
@@ -352,7 +352,7 @@ def _prepare_active_mesh(context):
             print(f"活动对象不是 Cloth 面网格，自动改用: {active.name}")
         elif active.type == "MESH" and not active.data.polygons:
             raise RuntimeError(
-                f"活动 Mesh '{active.name}' 没有面；请选择 remesh.py 生成的 "
+                f"活动 Mesh '{active.name}' 没有面；请选择 001_remesh.py 生成的 "
                 "*_CLOTH_* 三角网格，而不是 SVG 轮廓线。"
             )
         elif active.type != "MESH":

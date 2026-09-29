@@ -6,7 +6,7 @@ import bpy
 import numpy as np
 
 
-path = Path(__file__).resolve().parents[2] / "scripts/blender/generate_collision_exterior.py"
+path = Path(__file__).resolve().parents[2] / "scripts/blender/200_collision_exterior.py"
 spec = importlib.util.spec_from_file_location("exterior", path)
 exterior = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(exterior)

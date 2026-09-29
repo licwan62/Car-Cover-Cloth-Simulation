@@ -5,7 +5,7 @@
 ## 从 PANEL 自动生成 sewing SVG
 
 `generate_sewing_svg.py` 在 Illustrator 导出阶段识别三片式车罩轮廓，输出显式的
-`PANEL`、`SEAM`、`HEM` 分组，供 Blender 的 `generate_sewing.py` 使用。
+`PANEL`、`SEAM`、`HEM` 分组，供 Blender 的 `002_sew_from_svg.py` 使用。
 Python 端只依赖标准库；直接读取 `.ai` 需要 Windows 和已安装的 Adobe Illustrator，
 通过 PowerShell COM 调用同目录的 `read_panel.jsx`。无参数运行会打开 AI/SVG 文件选择窗口。
 
@@ -53,4 +53,4 @@ python scripts/illustrator/generate_sewing_svg.py "illustrator/定制" "illustra
 这是专用于上述三片式布局的识别器，输出重建这三个语义分组，不复制输入的其他辅助图层。
 
 在 Blender 中导入输出 SVG 的 PANEL 制作布料网格，再运行
-`scripts/blender/generate_sewing.py` 并选择同一个输出 SVG。
+`scripts/blender/002_sew_from_svg.py` 并选择同一个输出 SVG。

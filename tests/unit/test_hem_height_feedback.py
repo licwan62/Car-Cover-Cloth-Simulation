@@ -7,7 +7,7 @@ import unittest
 
 class HemHeightFeedbackTests(unittest.TestCase):
     def setUp(self):
-        path = Path(__file__).resolve().parents[2] / "scripts/blender/cloth.py"
+        path = Path(__file__).resolve().parents[2] / "scripts/blender/003_cloth_setup.py"
         tree = ast.parse(path.read_text(encoding="utf-8"))
         names = {"HEM_EQUAL_HEIGHT_TOLERANCE_MM", "HEM_HEIGHT_FEEDBACK_GAIN",
                  "MAX_HEM_FRONT_EXTRA_MM"}
@@ -34,7 +34,7 @@ class HemHeightFeedbackTests(unittest.TestCase):
 
 class PerVertexLevelTests(unittest.TestCase):
     def setUp(self):
-        path = Path(__file__).resolve().parents[2] / "scripts/blender/cloth.py"
+        path = Path(__file__).resolve().parents[2] / "scripts/blender/003_cloth_setup.py"
         tree = ast.parse(path.read_text(encoding="utf-8"))
         nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef)
                  and n.name == "hem_level_target_z"]

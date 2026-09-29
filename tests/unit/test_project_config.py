@@ -8,8 +8,8 @@ import unittest
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-BLENDER_SCRIPTS = PROJECT_ROOT / "scripts" / "blender" / "config_driven"
-sys.path.insert(0, str(BLENDER_SCRIPTS))
+SHARED_MODULES = PROJECT_ROOT / "scripts" / "modules"
+sys.path.insert(0, str(SHARED_MODULES))
 
 from project_config import (  # noqa: E402
     load_cloth_preset,
@@ -49,7 +49,7 @@ class ProjectConfigTests(unittest.TestCase):
 
     def test_standalone_denim_preset_is_self_contained(self) -> None:
         cloth = load_cloth_preset()
-        path = PROJECT_ROOT / "scripts" / "blender" / "cloth.py"
+        path = PROJECT_ROOT / "scripts" / "blender" / "003_cloth_setup.py"
         source = path.read_text(encoding="utf-8")
         tree = ast.parse(source)
 
@@ -95,145 +95,6 @@ class ProjectConfigTests(unittest.TestCase):
         self.assertTrue(constants["ENABLE_POST_CLOTH_SEAM_WELD"])
         self.assertTrue(constants["ENABLE_SELF_COLLISION"])
         self.assertTrue(constants["ENABLE_OBJECT_COLLISION"])
-
-    def test_collision_proxy_config_and_standalone_match(self) -> None:
-        simulation = load_simulation_config()
-        config = simulation["collision_proxy"]
-        path = (
-            PROJECT_ROOT
-            / "scripts"
-            / "blender"
-            / "generate_collision_proxy.py"
-        )
-        source = path.read_text(encoding="utf-8")
-        tree = ast.parse(source)
-
-        imported_modules = {
-            alias.name
-            for node in tree.body
-            if isinstance(node, ast.Import)
-            for alias in node.names
-        }
-        imported_from = {
-            node.module
-            for node in tree.body
-            if isinstance(node, ast.ImportFrom)
-        }
-        self.assertEqual(imported_modules, {"bmesh", "bpy"})
-        self.assertEqual(imported_from, set())
-        self.assertNotIn("project_config", source)
-        self.assertNotIn("load_simulation_config", source)
-
-        constants = {}
-        for node in tree.body:
-            if not isinstance(node, ast.Assign) or len(node.targets) != 1:
-                continue
-            target = node.targets[0]
-            if isinstance(target, ast.Name):
-                try:
-                    constants[target.id] = ast.literal_eval(node.value)
-                except (ValueError, TypeError):
-                    pass
-
-        self.assertEqual(constants["PRESET_NAME"], config["preset"])
-        self.assertEqual(
-            constants["PROXY_COLLECTION_NAME"],
-            config["collection_name"],
-        )
-        self.assertEqual(constants["VOXEL_SIZE_MM"], config["voxel_size_mm"])
-        self.assertEqual(
-            constants["ENABLE_VOXEL_REMESH"],
-            config["use_voxel_remesh"],
-        )
-        self.assertEqual(
-            constants["REMOVE_DISCONNECTED_COMPONENTS"],
-            config["remove_disconnected_components"],
-        )
-        self.assertEqual(
-            constants["TARGET_FACE_RANGE"],
-            tuple(config["target_faces"]),
-        )
-        self.assertEqual(
-            constants["TARGET_FACE_COUNT"],
-            config["target_face_count"],
-        )
-        self.assertEqual(
-            constants["MAX_FINAL_FACE_COUNT"],
-            config["max_final_face_count"],
-        )
-        self.assertEqual(
-            constants["ENABLE_PLANAR_DISSOLVE"],
-            config["planar_dissolve"],
-        )
-        self.assertEqual(
-            constants["PLANAR_DISSOLVE_ANGLE_DEG"],
-            config["planar_angle_deg"],
-        )
-        self.assertEqual(constants["SMOOTH_METHOD"], config["smooth_method"])
-        self.assertEqual(
-            constants["SMOOTH_VOLUME_PRESERVE"],
-            config["smooth_volume_preserve"],
-        )
-        self.assertEqual(
-            constants["PRESERVE_SOURCE_BOUNDS"],
-            config["preserve_source_bounds"],
-        )
-        self.assertEqual(
-            constants["MAX_BOUNDS_ERROR_MM"],
-            config["max_bounds_error_mm"],
-        )
-        self.assertEqual(
-            constants["ENABLE_THIN_OVERHANG_SUPPORT"],
-            config["thin_overhang_support"]["enabled"],
-        )
-        self.assertEqual(
-            constants["THIN_OVERHANG_MAX_THICKNESS_MM"],
-            config["thin_overhang_support"]["max_thickness_mm"],
-        )
-        self.assertEqual(
-            constants["THIN_OVERHANG_MIN_HORIZONTAL_SPAN_MM"],
-            config["thin_overhang_support"]["min_horizontal_span_mm"],
-        )
-        self.assertEqual(
-            constants["THIN_OVERHANG_MIN_HEIGHT_RATIO"],
-            config["thin_overhang_support"]["min_height_ratio"],
-        )
-        self.assertEqual(
-            constants["THIN_OVERHANG_SUPPORT_DROP_MM"],
-            config["thin_overhang_support"]["support_drop_mm"],
-        )
-        self.assertEqual(
-            constants["THIN_OVERHANG_MAX_LENGTH_RATIO"],
-            config["thin_overhang_support"]["max_length_ratio"],
-        )
-        self.assertEqual(
-            constants["THIN_OVERHANG_MIN_WIDTH_RATIO"],
-            config["thin_overhang_support"]["min_width_ratio"],
-        )
-        self.assertEqual(
-            constants["THIN_OVERHANG_MIN_END_RATIO"],
-            config["thin_overhang_support"]["min_end_ratio"],
-        )
-        self.assertEqual(
-            constants["THIN_OVERHANG_MIN_ASPECT_RATIO"],
-            config["thin_overhang_support"]["min_aspect_ratio"],
-        )
-        self.assertEqual(
-            constants["ENABLE_LOWER_BODY_INSET"],
-            config["lower_body_inset"]["enabled"],
-        )
-        self.assertEqual(
-            constants["LOWER_BODY_INSET_MM"],
-            config["lower_body_inset"]["distance_mm"],
-        )
-        self.assertEqual(
-            constants["COLLISION_THICKNESS_MM"],
-            config["thickness_mm"],
-        )
-        self.assertEqual(
-            constants["COLLISION_FRICTION"],
-            config["friction"],
-        )
 
     def test_fit_thresholds_remain_marked_for_calibration(self) -> None:
         thresholds = load_fit_thresholds()

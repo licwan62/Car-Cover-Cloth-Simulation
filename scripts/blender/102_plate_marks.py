@@ -1,9 +1,9 @@
-"""Paint two plate-opening mockups on the settled PANEL_TOP cloth.
+"""Paint plate-opening mockups on the settled PANEL_TOP cloth.
 
 Select the Cloth mesh, go to the comparison frame, then run in Blender's Text
 Editor. The dark rectangles are material marks, not physical cutouts; they do
-not change Cloth topology, mass, or collision. Distances are measured inward
-from the front and rear ends of PANEL_TOP in evaluated world coordinates.
+not change Cloth topology, mass, or collision. Distances are clear gaps from a
+front/rear PANEL_TOP edge to the nearest rectangle edge in world coordinates.
 """
 
 import bpy
@@ -16,6 +16,7 @@ PLATES_CONFIG = {
     "rear_distance_mm": 300.0,
     "length_mm": 440.0,
     "width_mm": 140.0,
+    "front_only": False,
     "material_name": "CC Plate Opening Mockup",
     "color_rgba": (0.012, 0.012, 0.016, 1.0),
     "color_hex": "#1C1C21",
@@ -89,7 +90,10 @@ def _material_slot(obj, config):
 
 def apply_plate_marks(cloth=None, config=None):
     config = dict(PLATES_CONFIG if config is None else config)
-    for key in ("front_distance_mm", "rear_distance_mm", "length_mm", "width_mm"):
+    for key in ("front_distance_mm", "rear_distance_mm"):
+        if float(config[key]) < 0:
+            raise ValueError(f"{key} 不能小于零")
+    for key in ("length_mm", "width_mm"):
         if float(config[key]) <= 0:
             raise ValueError(f"{key} 必须大于零")
     axis = config["front_axis"].upper()
@@ -110,10 +114,14 @@ def apply_plate_marks(cloth=None, config=None):
     mid_cross = (min(cross_positions) + max(cross_positions)) / 2
     half_length = float(config["length_mm"]) / 2000
     half_width = float(config["width_mm"]) / 2000
-    centers = (
-        front + direction * float(config["front_distance_mm"]) / 1000,
-        rear - direction * float(config["rear_distance_mm"]) / 1000,
-    )
+    # The UI distance is an edge gap, rather than a distance to the center.
+    centers = [
+        front + direction * (float(config["front_distance_mm"]) / 1000 + half_length),
+    ]
+    if not config.get("front_only", False):
+        centers.append(
+            rear - direction * (float(config["rear_distance_mm"]) / 1000 + half_length)
+        )
     for center in centers:
         if center - half_length < low or center + half_length > high:
             raise ValueError("矩形超出 PANEL_TOP 前后范围；请调整距离或长度")
@@ -145,7 +153,7 @@ def apply_plate_marks(cloth=None, config=None):
         for index in old_faces:
             if index < len(cloth.data.polygons) and cloth.data.polygons[index].material_index == old_slot:
                 cloth.data.polygons[index].material_index = fallback
-    marked = marks[0] | marks[1]
+    marked = set().union(*marks)
     for index in marked:
         cloth.data.polygons[index].material_index = slot
     cloth[SLOT_KEY] = slot
@@ -154,8 +162,12 @@ def apply_plate_marks(cloth=None, config=None):
     cloth["cc_plates_rear_distance_mm"] = float(config["rear_distance_mm"])
     cloth["cc_plates_length_mm"] = float(config["length_mm"])
     cloth["cc_plates_width_mm"] = float(config["width_mm"])
+    cloth["cc_plates_front_only"] = bool(config.get("front_only", False))
     cloth.data.update()
-    print(f"Plate opening mockups: {len(marks[0])} front faces, {len(marks[1])} rear faces")
+    counts = f"{len(marks[0])} front faces"
+    if len(marks) > 1:
+        counts += f", {len(marks[1])} rear faces"
+    print(f"Plate opening mockups: {counts}")
     return marks
 
 
@@ -166,7 +178,12 @@ class CC_OT_setup_plates_maker(bpy.types.Operator):
 
     def draw(self, context):
         wm = context.window_manager
-        for name in ("front_axis", "front_distance_mm", "rear_distance_mm", "length_mm", "width_mm"):
+        self.layout.prop(wm, "cc_plates_front_axis")
+        self.layout.prop(wm, "cc_plates_front_only")
+        self.layout.prop(wm, "cc_plates_front_distance_mm")
+        if not wm.cc_plates_front_only:
+            self.layout.prop(wm, "cc_plates_rear_distance_mm")
+        for name in ("length_mm", "width_mm"):
             self.layout.prop(wm, "cc_plates_" + name)
         self.layout.prop(wm, "cc_plates_color_hex")
 
@@ -175,13 +192,16 @@ class CC_OT_setup_plates_maker(bpy.types.Operator):
         config = dict(PLATES_CONFIG)
         for name in ("front_axis", "front_distance_mm", "rear_distance_mm", "length_mm", "width_mm"):
             config[name] = getattr(wm, "cc_plates_" + name)
+        config["front_only"] = wm.cc_plates_front_only
         config["color_hex"] = wm.cc_plates_color_hex
         try:
             marks = apply_plate_marks(config=config)
         except (RuntimeError, ValueError) as error:
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
-        self.report({"INFO"}, f"已标记前后两个矩形，共 {len(marks[0] | marks[1])} 个面")
+        marked = set().union(*marks)
+        label = "车头矩形" if len(marks) == 1 else "前后两个矩形"
+        self.report({"INFO"}, f"已标记{label}，共 {len(marked)} 个面")
         return {"FINISHED"}
 
     def invoke(self, context, event):
@@ -198,14 +218,22 @@ def launch_plates_dialog():
                               ("-X", "-X", ""), ("+X", "+X", "")),
         default=PLATES_CONFIG["front_axis"],
     )
+    wm.cc_plates_front_only = bpy.props.BoolProperty(
+        name="仅添加车头矩形",
+        description="启用后不添加车尾矩形",
+        default=PLATES_CONFIG["front_only"],
+    )
     for key, label in (
-        ("front_distance_mm", "前端距 HEM_TOP_FRONT (mm)"),
-        ("rear_distance_mm", "后端距 HEM_TOP_REAR (mm)"),
+        ("front_distance_mm", "车头端净距 (mm)"),
+        ("rear_distance_mm", "车尾端净距 (mm)"),
         ("length_mm", "矩形长度 (mm)"),
         ("width_mm", "矩形宽度 (mm)"),
     ):
         setattr(wm, "cc_plates_" + key, bpy.props.FloatProperty(
-            name=label, min=1.0, default=PLATES_CONFIG[key]))
+            name=label,
+            min=0.0 if "distance" in key else 1.0,
+            default=PLATES_CONFIG[key],
+        ))
     wm.cc_plates_color_hex = bpy.props.StringProperty(
         name="颜色色值", description="十六进制颜色，例如 #FF6600", default=PLATES_CONFIG["color_hex"])
     bpy.utils.register_class(CC_OT_setup_plates_maker)

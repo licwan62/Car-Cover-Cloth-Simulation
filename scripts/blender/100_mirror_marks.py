@@ -101,7 +101,7 @@ def _vertex_group_indices(obj, name):
     group = obj.vertex_groups.get(name)
     if group is None:
         raise RuntimeError(
-            f"缺少 {name} 顶点组；请先运行 generate_sewing.py "
+            f"缺少 {name} 顶点组；请先运行 002_sew_from_svg.py "
             "从语义 SVG 创建 PANEL 顶点组。"
         )
     indices = {

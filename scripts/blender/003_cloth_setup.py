@@ -92,7 +92,7 @@ ROOF_PIN_RELEASE_END = 29
 SHADE_SMOOTH = True
 ENABLE_DISPLAY_SUBSURF = True
 
-# Seam preview. As with mirror_markers.py, semantic seam groups are
+# Seam preview. As with 100_mirror_marks.py, semantic seam groups are
 # visualised by assigning a high-contrast material to existing cloth faces.
 # This follows Cloth deformation and adds no solve geometry or constraints.
 ENABLE_SEAM_TEXTURE = True
@@ -666,7 +666,7 @@ def report_sewing_preflight(obj):
             raise RuntimeError(
                 "检测到 Sewing 黑洞拓扑，已停止添加/更新 Cloth。"
                 f"每个缝线顶点最多允许 {MAX_SEWING_CONNECTORS_PER_VERTEX} 条 "
-                "loose sewing edge；请重新运行 generate_sewing.py 修复配对。"
+                "loose sewing edge；请重新运行 002_sew_from_svg.py 修复配对。"
             )
 
     for name_a, name_b in seam_length_compare_pairs(obj):

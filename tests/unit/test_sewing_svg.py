@@ -71,7 +71,7 @@ class SewingSVGTests(unittest.TestCase):
     def test_dodge_output_is_readable_by_actual_sewing_parser(self):
         source = ROOT / "scripts/illustrator/SVG/Dodge Challenger 495-125 (+12).svg"
         before = source.read_bytes()
-        tree = ast.parse((ROOT / "scripts/blender/generate_sewing.py").read_text(encoding="utf-8"))
+        tree = ast.parse((ROOT / "scripts/blender/002_sew_from_svg.py").read_text(encoding="utf-8"))
         names = {"_local_name", "_cubic", "_flatten_path", "_element_polyline", "_semantic_svg"}
         nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in names
                  or isinstance(n, ast.Assign) and isinstance(n.targets[0], ast.Name)

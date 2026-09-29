@@ -5,9 +5,19 @@ from pathlib import Path
 import sys
 
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-if str(SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPT_DIR))
+# Shared helpers live in scripts/modules, which Blender puts on sys.path once
+# the project's scripts folder is listed in Preferences > File Paths > Script
+# Directories. The fallback serves `blender --factory-startup --python <file>`.
+try:
+    import project_config  # noqa: F401
+except ImportError:
+    MODULES_DIR = Path(__file__).resolve().parent.parent.parent / "modules"
+    if not (MODULES_DIR / "project_config.py").is_file():
+        raise ImportError(
+            "project_config not found. Add <project>/scripts to Blender "
+            "Preferences > File Paths > Script Directories and restart Blender."
+        ) from None
+    sys.path.append(str(MODULES_DIR))
 
 from project_config import load_simulation_config
 from seam_naming import (

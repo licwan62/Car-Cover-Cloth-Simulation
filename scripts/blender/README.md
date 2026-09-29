@@ -1,153 +1,115 @@
-# Blender Modules
+# Blender Scripts
 
-## Exterior-only collision envelope
+## Naming
 
-Run `generate_collision_exterior.py` in Blender's Text Editor in Object Mode,
-with the original vehicle meshes selected. The new `* Exterior Collision` mesh
-is selected on completion. Sources and their modifiers remain unchanged. If
-sources or older proxies already have Collision enabled, disable those colliders
-before simulating so the cloth only contacts the new shell.
+Scripts are numbered by workflow stage, matching the Text block names used in
+the lab `.blend` files (`000_clothing_from_svg`, `001_remesh`, ...), so Blender's
+**Text > Open** dialog lists them in working order:
 
-This standalone alternative samples the closest evaluated surface from both
-ends of world X/Y/Z rays. It fills the spans between opposing exterior hits,
-closes small gaps, and extracts/remeshes that envelope instead of remeshing or
-decimating the source parts. Hidden interior surfaces do not change the first
-hits. Single-sided panels are sampled too. Only the largest spatial component
-is retained; enclosed cavity surfaces and detached islands are removed. Output
-must pass closed-manifold and nonzero-volume checks before Collision is added.
+| Range | Stage |
+| --- | --- |
+| `0xx` | Main pipeline: SVG → cloth mesh → sewing → cloth setup |
+| `1xx` | Non-physical comparison marks on a settled cover |
+| `2xx` | Vehicle collision objects |
+| `3xx` | Reports and exports |
 
-Defaults: `VOXEL_SIZE_MM=40`, `GAP_CLOSE_CELLS=1`, `TARGET_TRIANGLES=12000`,
-1 mm collision margin, double-sided collision. Millimetres respect the scene
-unit scale. High-poly input is used for BVH queries without pre-decimation;
-grid and evaluated-triangle budgets reject excessive allocations. Reduce voxel
-size for finer features at greater processing/memory cost. The triangle target
-is approximate, not a hard cap. Progress is printed to Blender's console.
+A `config_driven/` script reuses the number of its standalone counterpart for
+the same stage. Numbered files are run, not imported; `project_config.load_blender_script()`
+loads one by path when a config-driven wrapper needs its implementation.
 
-The envelope deliberately bridges concavities, wheel wells and under-wing gaps.
-Open bodywork can expose interior parts to the rays; this is geometric exterior
-sampling, not semantic part classification. Features thinner than the sampling
-spacing may be missed, and detached mirrors can be discarded. Voxelization and
-smoothing can shift dimensions by roughly the sampling scale; source bounds
-are not forcibly restored. Inspect the result before baking, and use original
-geometry for fit measurements. This script does not change the existing proxy
-or two-stage shell generators.
+## Script index
 
-Blender regression check (synthetic meshes, no existing scene edits):
-`blender --background --factory-startup --python-exit-code 1 --python tests/unit/blender_collision_exterior_check.py`
-
-## Module index
-
-| Module | Responsibility | Current status |
+| Script | Responsibility | Notes |
 | --- | --- | --- |
-| `config_driven/project_config.py` | Load and validate project JSON | Blender-independent |
-| `config_driven/seam_naming.py` | Parse `S001_PANEL[_A\|_B]` names | Blender-independent |
-| `config_driven/repair_boundary.py` | Endpoint weld, small-gap bridge, boundary validation | Migrated existing implementation |
-| `config_driven/generate_cloth_mesh.py` | Uniform sampling and constrained Delaunay mesh | Migrated existing implementation |
-| `config_driven/generate_sewing.py` | Select seam paths and create Sewing Springs | Semantic ID pairing, A/B direction and legacy fallback integrated |
-| `generate_sewing.py` | Build Sewing directly from a semantic SVG | Creates PANEL/SEAM/HEM and automatic A/B vertex groups, then arc-length-matched loose edges without project imports |
-| `config_driven/cloth.py` | Apply Oxford cloth settings | Config-driven SmoothDrape V2 preset |
-| `cloth.py` | Apply the self-contained HemFeedback 75F V28 preset | Late per-vertex animated soft pin springs, object/self collision, and seam material |
-| `config_driven/mirror_markers.py` | Add left/right mirror-position comparison marks | Config-driven, non-physical face-material marks based on TESLA-MODELX.ai artboard 1 |
-| `mirror_markers.py` | Add the same mirror-position marks without project dependencies | Opens an interactive `MARKER_CONFIG` dialog before applying non-physical marks at the settled frame |
-| `config_driven/generate_collision_proxy.py` | Generate a smooth vehicle Collision Proxy | Reads `config/simulation.json`; delegates geometry work to the matching self-contained implementation |
-| `generate_collision_proxy.py` | Generate the same Collision Proxy without project dependencies | Embedded FastCollisionShell V5 settings; original evaluated topology, zero-or-one rear-wing support, optional voxel remesh, 18k-triangle collision budget, source-bounds correction, and Collision physics |
-| `generate_collision_shell.py` | Test a two-stage collision-shell workflow | Creates a 35 mm inspection Outer Shell, extracts a 50 mm/6k-triangle Collision only from that shell, restores source bounds, and runs lightweight geometry/silhouette checks |
-| `generate_collision_exterior.py` | Build an exterior-only drape collider | Six-direction first-hit envelope, gap closing, cavity/island removal, and closed-manifold validation; source topology is never decimated |
-| `cloth_fit_test.py` | Apply a lightweight Cloth preset | Quick car-cover fit test with embedded settings |
-| `svg_cloth_workflow.py` | Import a semantic SVG and run the complete cloth pipeline | One file dialog; joins PANEL curves, remeshes, generates Sewing, and applies the embedded cloth preset |
-| `export_three_views.py` | Real-size three-view SVG/PNG export | Auxiliary reporting tool |
-| `export_six_views.py` | Four orthographic views and two perspective views | Six PNGs and an embedded SVG atlas; self-contained |
+| `000_svg_to_cloth.py` | Import a semantic SVG and run the complete cloth pipeline | One file dialog; embeds `001`–`003` (generated, see below) |
+| `001_remesh.py` | Uniform sampling and constrained Delaunay cloth mesh | Embedded settings |
+| `002_sew_from_svg.py` | Build Sewing directly from a semantic SVG | Creates PANEL/SEAM/HEM and automatic A/B vertex groups, then arc-length-matched loose edges |
+| `003_cloth_setup.py` | Apply the self-contained cloth preset | Animated soft pin springs, object/self collision, and seam material |
+| `100_mirror_marks.py` | Mirror-pocket and charge-port position marks | Opens an interactive `MARKER_CONFIG` dialog |
+| `101_door_marks.py` | Vertical door-position line on both sides | Interactive distance from the vehicle front |
+| `102_plate_marks.py` | Plate-opening mockups on `PANEL_TOP` | Material marks only, not cutouts |
+| `200_collision_exterior.py` | Exterior-only drape collider | Six-direction first-hit envelope, gap closing, cavity/island removal, closed-manifold validation |
+| `300_export_three_views.py` | Real-size three-view SVG/PNG export | Auxiliary reporting tool |
+| `301_export_six_views.py` | Four orthographic and two perspective views | Six PNGs and an embedded SVG atlas |
+| `config_driven/000_repair_boundary.py` | Endpoint weld, small-gap bridge, boundary validation | Reads `boundary_repair` |
+| `config_driven/001_remesh.py` | Same meshing stage as `001_remesh.py` | Reads `cloth_mesh` |
+| `config_driven/002_sew_from_groups.py` | Create Sewing Springs from existing seam vertex groups | Semantic ID pairing, A/B direction, legacy pairs from `sewing` |
+| `config_driven/003_cloth_setup.py` | Apply Oxford cloth settings | `config/cloth/oxford_210d.json` (SmoothDrape V2) |
+| `config_driven/100_mirror_marks.py` | Same marks as `100_mirror_marks.py` | Reads `mirror_markers`; no dialog |
+| `../modules/project_config.py` | Load project JSON; load numbered scripts | Blender-independent shared module |
+| `../modules/seam_naming.py` | Parse `S001_PANEL[_A\|_B]` names | Blender-independent shared module |
+| `../tools/build_svg_to_cloth.py` | Refresh the payloads embedded in `000_svg_to_cloth.py` | Regular Python, not Blender |
 
-## Six-view atlas
+Planned modules from `doc/AGENT.md` that do not yet have production
+implementations are intentionally not represented by empty Python files. Add
+them with tests as the pipeline grows: `import_pattern`, `validate_pattern`,
+`parse_seams`, `arrange_panels`, `setup_pin`, `run_simulation`, `analyze_fit`,
+and `export_report`.
 
-Activate the vehicle Mesh at the desired frame and run
-`export_six_views.py` in Blender's Text Editor. The script
-exports LEFT, FRONT, TOP, REAR, LEFT_FRONT and LEFT_REAR PNGs plus a three-row,
-two-column SVG atlas into `SIX_VIEWS/<object name>/` beside the saved blend file
-(Desktop for an unsaved file). Reruns overwrite the matching export files.
-Only the active Mesh is rendered, including its evaluated modifiers.
+## Script organization
 
-The four orthographic images retain millimetre dimensions in the SVG;
-perspective images are visual references without a measurement scale. The
-canvas grows as needed. Z is height and the longer world X/Y extent is length.
-Adjust `LEFT_SIGN` and `FRONT_SIGN` for the model orientation; the perspective
-views follow these same settings. Sampling density, perspective focal length
-and elevation are configurable at the top of the script. Render settings and
-object render visibility are restored after export, including render failures.
+Add the project's `scripts` folder (not `scripts/blender`) to Blender
+**Preferences > File Paths > Script Directories** once per Blender version
+(3.6 or newer), save preferences and restart. Blender then searches only
+`scripts/modules` (added to `sys.path`), `scripts/addons` (registered add-ons)
+and `scripts/startup` (run at startup). It does not register or run the plain
+scripts in `scripts/blender/`; open those in the Text Editor and click
+**Run Script**. This project has no `addons` or `startup` content.
 
-The default Collision Proxy preserves the evaluated source topology and overall
-X/Y/Z bounds. Whole-vehicle voxel remeshing and smoothing are disabled. When
-the merged source exceeds the 24,000-triangle hard budget, Collapse targets
-18,000 triangles and a 3-degree planar dissolve removes redundant coplanar
-facets. Candidate scoring can select either one rear wing or none. Only that
-single component receives a downward support volume, closing the gap where a
-falling cover could become pinched by a thin trailing edge.
-Because that support deliberately changes local clearance below the wing, use
-the original vehicle rather than the collision proxy for local Fit measurements.
-If a deliberately tapered drape-support shell is needed, enable
-`lower_body_inset` and save it as a separate proxy; do not use that altered
-shell for Fit metrics.
+- `scripts/blender/*.py` use embedded settings and run without project files,
+  including when pasted into an unsaved Text block.
+- `scripts/blender/config_driven/*.py` read `config/*.json`. Open the saved file
+  from the project path, then Run Script. They import `project_config` and
+  `seam_naming` from `scripts/modules`; they do not rely on `__file__`, which
+  Blender sets to `<blend path>/<text name>` for Text blocks. Without the Script
+  Directory they stop with `project_config not found`.
+- `blender --python scripts/blender/config_driven/<name>.py` also works with
+  `--factory-startup`: the scripts fall back to `../../modules` beside their
+  real file path.
+- `config_driven/100_mirror_marks.py` calls
+  `project_config.load_blender_script("100_mirror_marks.py")`, which loads a
+  fresh copy on every run so edits are never masked by a stale module.
 
-## Self-contained selection order
+Blender checks (factory settings; saved preferences and scenes are not changed):
 
-`generate_collision_proxy.py` leaves the generated proxy selected so
-it can be inspected. Before running `cloth.py`, select the
-actual car-cover mesh; selecting the proxy as well is harmless because the cloth
-script recognizes and skips meshes with Collision physics. Collider activation
-no longer depends on `CC_COLLISION_PROXY` or any other collection name. Every
-Mesh with a Collision modifier in the current scene participates, while objects
-that belong only to another scene do not. This makes switching scenes sufficient
-to switch vehicle colliders; collection names are free to describe each model.
-If an older run already added Cloth to the proxy, remove that Cloth modifier.
-Free the old Cloth bake before running V28. Setup samples a free trajectory;
-then replay frames 1-75 to evaluate the late HEM spring guidance.
+```powershell
+blender --background --factory-startup --python-exit-code 1 --python tests/blender/check_script_directories.py
+blender --background --factory-startup --python-exit-code 1 --python tests/blender/check_collision_exterior.py
+```
 
-## Two-stage collision shell test
+## 000: One-click SVG cloth workflow
 
-Use `generate_collision_shell.py` when a detailed vehicle consists
-of many panels, wheels, glass and interior islands. Select only the original
-vehicle meshes and run the script in Object Mode. It creates two objects in
-与活动目标物体同名的集合（未激活有效源物体时使用首个有效源物体名）：
-所选车体源对象也会链接到该集合；原有集合链接会保留。
-高模源对象、Outer Shell 和低模代理都会配置 Collision。两个 voxel shell
-在恢复源车体边界前执行向内半体素补偿，低模整体尺寸仍与源车体一致；碰撞体
-外侧厚度仅保留 1 mm，以免代理局部外鼓或额外撑大车衣。
+Open `000_svg_to_cloth.py` in Blender's Text Editor and click **Run Script**.
+Choose the semantic `_sewing.svg` file in the file dialog. The operator imports
+and joins only the curves inside the SVG `PANEL` group, creates the cloth mesh
+with `001_remesh.py`, generates semantic sewing from the same source file, and
+then applies `003_cloth_setup.py`. Existing vehicle Collision objects remain in
+the scene and are discovered by the cloth setup as usual. This is a single-file
+standalone script: it can also be pasted into an unsaved Blender Text block and
+does not need access to the repository or neighboring Python files.
 
-- `* Outer Shell TEST` is the retained fine shell for visual inspection only.
-- `* Shell Collision TEST` is the selected, lightweight-checked Collision object to use
-  with Cloth.
+`000_svg_to_cloth.py` is partly generated. Its sources of truth are
+`001_remesh.py`, `002_sew_from_svg.py` and `003_cloth_setup.py`; the operator
+code around `_EMBEDDED_SCRIPTS` is edited by hand. After changing any of the
+three sources, regenerate from the project root with a regular Python
+interpreter (not inside Blender) and commit both files:
 
-Stage one performs a 35 mm voxel union, removes every detached surface except
-the main vehicle shell, smooths it, and restores the source AABB. It then probes
-the upper silhouette against the evaluated source using a lightweight 128-ray
-grid. In the default fast mode, excessive roof/hood loss produces a warning and
-keeps the shell for manual correction. Set `ENABLE_THIN_SURFACE_REPAIR=True`
-only when an automatic 250 mm Solidify rebuild is worth the potentially large
-voxel cost. Stage two voxelizes the accepted shell again at 50 mm, removes
-residual islands, smooths it, decimates it to 6,000 triangles, restores bounds,
-and enables double-sided Collision with 1 mm thickness and friction 3. Both
-stages reject empty or non-finite geometry, and the final stage enforces the
-triangle budget and exact source bounds. Silhouette loss remains advisory while
-`ENFORCE_TOP_SURFACE_ACCURACY=False`.
+```powershell
+python scripts/tools/build_svg_to_cloth.py
+```
 
-For high-detail vehicles, evaluated temporary copies are proportionally
-pre-decimated to 180,000 triangles before they are joined and voxelized. The
-stage-one voxel result is further capped at 30,000 triangles before smoothing.
-Neither stage runs the expensive full BMesh topology/volume audit. Accuracy is
-instead guarded by voxel remeshing, largest-component cleanup, source-bounds
-restoration, finite-coordinate checks, and a final BVH upper-silhouette probe.
-The original vehicle meshes are not modified. The generator prints progress
-before each blocking stage and rejects an estimated stage-one voxel grid above
-eight million cells, which usually indicates incorrect model units or distant
-stray geometry. Adjust `PRE_VOXEL_MAX_TRIANGLES`,
-`MAX_ESTIMATED_VOXEL_CELLS`, or the voxel sizes at the top of
-`generate_collision_shell.py` when a deliberate exception is required.
+`tests/unit/test_blender_script_paths.py` fails while the embedded copies are
+stale.
 
-In the `Lab.blend` Tesla test, the final shell was a single watertight component
-with zero boundary/non-manifold edges and exact source dimensions. A frame
-1-50 V25 Cloth bake completed without any tested cloth vertex inside the shell.
+## 002/003: Sewing and cloth setup
 
-## Sewing and final seam closure
+Select the car-cover mesh before running `003_cloth_setup.py`. Selecting a
+collider as well is harmless because the cloth script recognizes and skips
+meshes with Collision physics. Collider activation does not depend on any
+collection name: every Mesh with a Collision modifier in the current scene
+participates, while objects that belong only to another scene do not. This
+makes switching scenes sufficient to switch vehicle colliders. If an older run
+added Cloth to a collider, remove that Cloth modifier.
 
 The self-contained V28 cloth preset first samples a 75-frame free drape during
 setup, then returns to Scene Start for the guided replay. Frames 45-65 ramp
@@ -174,44 +136,70 @@ avoid modifying geometry from simulation handlers. Weld and subdivision are
 only disabled temporarily while sampling, then their visibility is restored.
 Rerun setup after changing geometry or physical parameters.
 
-Both `generate_sewing.py` and the V28 setup preflight reject a vertex connected
-to more than two loose sewing edges. Such a many-to-one hub is a topology error
-that creates the tail "black-hole" effect; increasing Sewing force would make
-it worse rather than correct it.
+Both `002_sew_from_svg.py` and the cloth setup preflight reject a vertex
+connected to more than two loose sewing edges. Such a many-to-one hub is a
+topology error that creates the tail "black-hole" effect; increasing Sewing
+force would make it worse rather than correct it.
 
-Planned modules from `doc/AGENT.md` that do not yet have production implementations are intentionally not represented by empty Python files. Add them with tests as the pipeline grows: `import_pattern`, `validate_pattern`, `parse_seams`, `arrange_panels`, `setup_pin`, `run_simulation`, `analyze_fit`, and `export_report`.
-
-## Mirror-position comparison marks
+## 100: Mirror-position comparison marks
 
 Artboard 1 of `illustrator/TESLA-MODELX.ai` places the mirror-pocket center
 1600 mm behind the front-bottom endpoint and 1020 mm above it. The left-side
 charge-port center is 340 mm from the rear-bottom endpoint and 820 mm above it.
 At the settled comparison frame, activate the Cloth mesh and run
-`config_driven/mirror_markers.py`. The evaluated `PANEL_LEFT` and `PANEL_RIGHT` vertex
-groups provide separate side-panel coordinate references, so `PANEL_TOP` and
-vehicle Collision bounds cannot shift the marks. The script paints
-small left/right mirror marks orange-red and the left charge-port mark blue. It does not create a mirror-pocket
-mesh or affect Cloth, Collision, mass, sewing, or Fit geometry. If the vehicle
-front axis differs from the Model X scene's default -Y, change
-`mirror_markers.front_axis` in `config/simulation.json`.
+`config_driven/100_mirror_marks.py`. The evaluated `PANEL_LEFT` and
+`PANEL_RIGHT` vertex groups provide separate side-panel coordinate references,
+so `PANEL_TOP` and vehicle Collision bounds cannot shift the marks. The script
+paints small left/right mirror marks orange-red and the left charge-port mark
+blue. It does not create a mirror-pocket mesh or affect Cloth, Collision, mass,
+sewing, or Fit geometry. If the vehicle front axis differs from the Model X
+scene's default -Y, change `mirror_markers.front_axis` in
+`config/simulation.json`.
 
-## Script organization
+## 200: Exterior-only collision envelope
 
-Scripts in `scripts/blender/` use embedded settings and run without project JSON.
-`config_driven/` contains JSON-driven workflows and their helper modules.
-Run configuration-driven scripts from their saved project paths. Their JSON
-files remain in the repository's `config/` directory. Collision-proxy and
-mirror-marker wrappers reuse the implementations in the parent directory.
+Run `200_collision_exterior.py` in Blender's Text Editor in Object Mode,
+with the original vehicle meshes selected. The new `* Exterior Collision` mesh
+is selected on completion. Sources and their modifiers remain unchanged. If
+sources or older proxies already have Collision enabled, disable those colliders
+before simulating so the cloth only contacts the new shell.
 
-## One-click SVG cloth workflow
+The script samples the closest evaluated surface from both ends of world X/Y/Z
+rays. It fills the spans between opposing exterior hits, closes small gaps, and
+extracts/remeshes that envelope instead of remeshing or decimating the source
+parts. Hidden interior surfaces do not change the first hits. Single-sided
+panels are sampled too. Only the largest spatial component is retained;
+enclosed cavity surfaces and detached islands are removed. Output must pass
+closed-manifold and nonzero-volume checks before Collision is added.
 
-Open `svg_cloth_workflow.py` in Blender's Text Editor and click **Run Script**.
-Choose the semantic `_sewing.svg` file in the file dialog. The operator imports
-and joins only the curves inside the SVG `PANEL` group, creates the cloth mesh
-with `remesh.py`, generates semantic sewing from the same source file, and then
-applies `cloth.py`. Existing vehicle Collision objects remain in the scene
-and are discovered by the cloth setup as usual. This is a single-file standalone
-script: it can also be pasted into an unsaved Blender Text block and does not
-need access to the repository or neighboring Python files. After changing one
-of its three source scripts, run `build_svg_cloth_workflow_standalone.py` once
-to refresh the embedded implementations.
+Defaults: `VOXEL_SIZE_MM=40`, `GAP_CLOSE_CELLS=1`, `TARGET_TRIANGLES=12000`,
+1 mm collision margin, double-sided collision. Millimetres respect the scene
+unit scale. High-poly input is used for BVH queries without pre-decimation;
+grid and evaluated-triangle budgets reject excessive allocations. Reduce voxel
+size for finer features at greater processing/memory cost. The triangle target
+is approximate, not a hard cap. Progress is printed to Blender's console.
+
+The envelope deliberately bridges concavities, wheel wells and under-wing gaps.
+Open bodywork can expose interior parts to the rays; this is geometric exterior
+sampling, not semantic part classification. Features thinner than the sampling
+spacing may be missed, and detached mirrors can be discarded. Voxelization and
+smoothing can shift dimensions by roughly the sampling scale; source bounds
+are not forcibly restored. Inspect the result before baking, and use original
+geometry for fit measurements.
+
+## 301: Six-view atlas
+
+Activate the vehicle Mesh at the desired frame and run
+`301_export_six_views.py` in Blender's Text Editor. The script
+exports LEFT, FRONT, TOP, REAR, LEFT_FRONT and LEFT_REAR PNGs plus a three-row,
+two-column SVG atlas into `SIX_VIEWS/<object name>/` beside the saved blend file
+(Desktop for an unsaved file). Reruns overwrite the matching export files.
+Only the active Mesh is rendered, including its evaluated modifiers.
+
+The four orthographic images retain millimetre dimensions in the SVG;
+perspective images are visual references without a measurement scale. The
+canvas grows as needed. Z is height and the longer world X/Y extent is length.
+Adjust `LEFT_SIGN` and `FRONT_SIGN` for the model orientation; the perspective
+views follow these same settings. Sampling density, perspective focal length
+and elevation are configurable at the top of the script. Render settings and
+object render visibility are restored after export, including render failures.
