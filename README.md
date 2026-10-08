@@ -37,7 +37,7 @@ doc/AGENT.md            完整设计依据
 
 `SmoothDrape_V2` 针对 50 mm 三角网格减少细密碎褶：降低面内压缩/剪切刚度，提高弯曲阻尼，并启用仅影响显示法线的 Shade Smooth。重新应用预设后必须删除旧 Cloth Bake 再模拟。
 
-Self-contained Blender scripts are in `scripts/blender/`. The V28 cloth preset samples free drape, then ramps per-vertex soft pin springs during frames 45-65 toward one shared HEM height and holds through frame 75. Clear the Cloth bake before setup and replay from Scene Start. See [Blender instructions](scripts/blender/README.md).
+Self-contained Blender scripts are in `scripts/blender/`. The V30 cloth preset (`cloth.py`, also embedded in `svg_cloth_workflow.py`) finishes sewing and draping in 30 frames. Clear the Cloth bake before setup and replay frames 1-30 from Scene Start. See [Blender instructions](scripts/blender/README.md).
 
 展开辅助力采用 `frame_change_pre` 调度；Sewing、后摆 Shape Key 与 Pin 强度使用持久化 Driver，避免逐帧改写 Cloth 设置而中断 Bake。两者都不创建 Action，兼容 Blender 5.x 的分层动画和依赖图。
 
@@ -65,8 +65,7 @@ S001_LEFT_B
 ### 当前标记代表什么
 
 `mirror_markers.py` 不生成真实的后视镜耳袋或充电口结构，也不修改
-Cloth 物理。它在已经落到车辆上的车罩三角面中查找版型坐标附近的面，给这些
-完整三角面分配高对比材质：
+Cloth 物理。它在已经落到车辆上的车罩上按版型坐标画出精确矩形：
 
 - 橙红色：左右后视镜耳位中心；
 - 蓝色：左侧充电口中心；
@@ -83,22 +82,30 @@ Model X 场景中车辆长度方向是 Blender 的 Y 轴，车头朝 `-Y`，车�
 轴。因此版型的二维 `x` 会映射到 Blender Y，版型的二维 `y` 会映射到
 Blender Z。脚本不是直接把二维数值写入 Blender X/Y。
 
-### 为什么红色是块状、不规则形状
+### 标记方案（所有贴图类标记通用）
 
-当前标记采用“面材质”而不是贴图。脚本先在仿真后的评估网格上计算每个三角面
-中心，再用椭圆距离判断该面是否落入标记范围。命中的三角面会整面变色，所以
-标记边界只能沿现有三角形边界形成：
+耳位、充电口、车门线（`door_maker.py`）、车牌开孔（`plates_maker.py`）以及
+`cloth.py` / `cloth_fit_test.py` 的缝线都使用同一套“CC mark overlay”方案，
+各脚本内嵌完全相同的代码块（`# >>> CC MARK OVERLAY >>>`，单元测试会检查
+各副本一致）：
 
-- 50 mm Cloth 网格只能得到近似轮廓，不会是 Illustrator 中光滑的耳朵外形；
-- 三角形大小、方向和疏密不均时，红色会呈锯齿、多边形或不对称块；
-- `width_mm`、`height_mm` 定义的是查找椭圆范围，不是最终生产耳袋轮廓；
-- 开启 Wireframe/编辑网格叠加时，黑色三角边会进一步强化这种碎块视觉；
-- 当前方法用于检查“中心位置是否正确”，不能用于检查耳袋形状或缝份。
+- 每个标记写入一个面角（CORNER）FLOAT2 属性 `cc_mark_<kind>`，记录该面角在
+  标记内的归一化坐标，标记范围为 `|u|, |v| < 1`；颜色记录在对象属性
+  `cc_mark_colors` 中；
+- 着色器逐像素判断 `max(|u|, |v|) < 1`，因此矩形边缘是直线，不再沿三角形
+  边界呈锯齿，并随布料变形移动；
+- 只有接触标记的面换成“基础材质副本 + 全部标记遮罩”的叠加材质，基础材质
+  本身不变；
+- Solid 模式无法运行着色器节点，因此叠加材质还带一张未连接的 Closest 图像，
+  通过活动 UV `cc_mark_uv` 显示同一矩形；
+- 任一脚本运行时都会根据全部 `cc_mark_*` 属性重建叠加材质，所以多个脚本
+  的标记可以共存，重复运行不会增加材质槽；旧版逐面标记材质会自动还原为
+  基础材质；
+- 缝线标记为沿缝线两侧各 `SEAM_MARK_WIDTH_MM` 宽的直边色带，按静止网格
+  距离计算。
 
-旧版脚本在没有基础材质的对象上先把红色材质放入槽位 0，而 Blender 所有面
-默认使用槽位 0，因此曾出现整个车罩变红。新版运行时会先建立/识别基础材质，
-清除旧的耳位与充电口材质分配，再只给目标附近的少量面着色。重新运行新版即可
-清理旧版造成的整罩红色。
+一个面同时接触多个标记时，渲染中全部显示，Solid 模式中只显示按名称排序
+的第一个。
 
 ### 配置版如何读取参数
 
@@ -165,7 +172,8 @@ mirror_markers.py
 2. 选择与该车罩对应的车辆或 Collision 对象；
 3. 最后选择 Cloth 对象，使 Cloth 成为活动对象；
 4. 运行配置版或 独立运行 版，两者只运行一个；独立运行 版需在弹窗确认参数；
-5. 使用 Material Preview，或在 Solid 模式把 Color 设置为 Material，查看颜色。
+5. 使用 Material Preview，或在 Solid 模式把 Color 设置为 Texture，查看标记
+   （交互窗口运行后会自动切换）。
 
 车辆参考选错、当前帧尚未落罩、车头轴配置错误或目标范围附近没有布料面时，
 新版会停止并报错，不再随意选择距离最近的三角面作为标记。

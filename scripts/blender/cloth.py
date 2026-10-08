@@ -1,11 +1,12 @@
-"""Apply a self-contained 50-frame sew and drape car-cover preset.
+"""Apply a self-contained 30-frame sew and drape car-cover preset.
 
 Usage in Blender:
 1. Open the Scripting workspace and create a new Text block.
 2. Paste this entire file into the Text Editor.
 3. Select one or more 50 mm cloth mesh objects in Object Mode.
-4. Clear any old Cloth bake, run Script, then simulate frames 1 through 50
-   (or Scene Start through Scene Start + 49).
+4. Clear any old Cloth bake, run Script, confirm the settings dialog (e.g.
+   固定车顶顶点), then simulate frames 1 through 30 (or Scene Start through
+   Scene Start + 29). Errors are reported in Blender's status bar.
 5. Start with non-intersecting panels. Self-collision is active from the start;
    the final stage applies per-vertex animated soft pin spring forces.
    Replay sequentially from Scene Start after clearing the cache; rerun this
@@ -22,20 +23,23 @@ from mathutils import Vector
 
 
 # ============================================================
-# EMBEDDED PRESET: CarCover_Simplified_50F_V29
+# EMBEDDED PRESET: CarCover_Simplified_30F_V30
 # Assumptions:
 # - 1 Blender Unit = 1 metre
 # - Average cloth mesh edge length is approximately 50 mm
 # - Sewing, gravity and collision settle without a post-simulation HEM pass
 # ============================================================
 
-PRESET_NAME = "CarCover_Simplified_50F_V29"
+PRESET_NAME = "CarCover_Simplified_30F_V30"
 MATERIAL_PRESET_NAME = "Car Cover Structured Oxford (uncalibrated)"
 MESH_EDGE_TARGET_MM = 50.0
-SIMULATION_END_OFFSET = 49
+SIMULATION_END_OFFSET = 29
 
-QUALITY_STEPS = 20
-TIME_SCALE = 1.0
+# V30 compresses the former 50-frame V29 schedule into 30 frames. Each frame
+# advances 5/3 as much cloth time with proportionally more substeps, so the
+# solver step size and total solve time per drape match V29.
+QUALITY_STEPS = 34
+TIME_SCALE = 50.0 / 30.0
 MASS_PER_VERTEX = 0.25
 AIR_DAMPING = 3.0
 
@@ -47,8 +51,8 @@ COMPRESSION_STIFFNESS = 68.0
 SHEAR_STIFFNESS = 65.0
 BENDING_STIFFNESS = 20.0
 BENDING_STIFFNESS_DURING_SEWING = 12.0
-BENDING_RECOVERY_START = 7
-BENDING_RECOVERY_END = 17
+BENDING_RECOVERY_START = 4
+BENDING_RECOVERY_END = 10
 BENDING_MODEL = "ANGULAR"
 
 TENSION_DAMPING = 10.0
@@ -61,12 +65,12 @@ SEWING_FORCE_START = 4.0
 MAX_SEWING_FORCE = 12.0
 SEWING_FORCE_SUSTAIN = 6.0
 SEWING_RAMP_START = 0
-SEWING_RAMP_END = 19
-SEWING_RELEASE_START = 24
-SEWING_RELEASE_END = 34
+SEWING_RAMP_END = 11
+SEWING_RELEASE_START = 14
+SEWING_RELEASE_END = 20
 SEWING_GRAVITY_FACTOR = 0.65
 GRAVITY_RAMP_START = 0
-GRAVITY_RAMP_END = 19
+GRAVITY_RAMP_END = 11
 
 ENABLE_OBJECT_COLLISION = True
 COLLISION_QUALITY = 8
@@ -83,21 +87,24 @@ SELF_COLLISION_FRICTION = 0.2
 PIN_GROUP_NAME = "PIN_ROOF"
 PIN_STIFFNESS = 0.85
 PIN_VERTEX_WEIGHT = 0.85
-ENABLE_ROOF_PIN_DURING_SIMULATION = True
+# Master switch for the temporary PIN_ROOF anchor on the TOP panel. False
+# leaves every roof vertex free: no PIN_ROOF group is created and the Cloth
+# pin group/stiffness driver is cleared.
+ENABLE_ROOF_PIN_DURING_SIMULATION = False
 AUTO_CREATE_ROOF_PIN = True
 AUTO_ROOF_PIN_VERTEX_COUNT = 12
-ROOF_PIN_HOLD_END = 19
-ROOF_PIN_RELEASE_END = 29
+ROOF_PIN_HOLD_END = 11
+ROOF_PIN_RELEASE_END = 17
 
 SHADE_SMOOTH = True
 ENABLE_DISPLAY_SUBSURF = True
 
-# Seam preview. As with mirror_markers.py, semantic seam groups are
-# visualised by assigning a high-contrast material to existing cloth faces.
-# This follows Cloth deformation and adds no solve geometry or constraints.
+# Seam preview. As with mirror_markers.py, semantic seam groups are drawn by
+# the shared CC mark overlay scheme: a straight band of SEAM_MARK_WIDTH_MM on
+# each side of the seam that follows Cloth deformation, also visible in Solid
+# view with Color = Texture. It adds no solve geometry or constraints.
 ENABLE_SEAM_TEXTURE = True
-SEAM_MATERIAL_NAME = "CC Seam Color Mark"
-SEAM_MATERIAL_SLOT_PROPERTY = "cc_seam_marker_material_slot"
+SEAM_MARK_WIDTH_MM = 12.0
 SEAM_FACE_PROPERTY = "cc_seam_marker_faces"
 BASE_MATERIAL_NAME = "CC Cloth Base"
 FABRIC_COLOR = (0.035, 0.055, 0.085, 1.0)
@@ -160,11 +167,11 @@ HEM_DOWN_FALLOFF_POWER = 0.5
 # direction remains vertical, while the small front/rear component aids slide.
 HEM_SLIDE_HORIZONTAL_FACTOR = 0.08
 
-HEM_DRAG_START = 17
-HEM_DRAG_END = 40
-HEM_LEVEL_START = 31
-HEM_LEVEL_END = 44
-HEM_DRAG_SETTLE_END = 49
+HEM_DRAG_START = 10
+HEM_DRAG_END = 24
+HEM_LEVEL_START = 19
+HEM_LEVEL_END = 26
+HEM_DRAG_SETTLE_END = 29
 HEM_EQUAL_HEIGHT_TOLERANCE_MM = 20.0
 ENABLE_HEM_HEIGHT_FEEDBACK = False
 HEM_HEIGHT_FEEDBACK_GAIN = 0.5
@@ -188,8 +195,8 @@ TOP_DOWN_MIN_DISTANCE_MM = 150.0
 TOP_DOWN_MAX_DISTANCE_MM = 1300.0
 TOP_DOWN_FALLOFF_POWER = 0.5
 TOP_DOWN_RAMP_END = 1
-TOP_DOWN_HOLD_END = 3
-TOP_DOWN_RELEASE_END = 5
+TOP_DOWN_HOLD_END = 2
+TOP_DOWN_RELEASE_END = 3
 
 # Legacy staged expansion parameters are retained for deterministic cleanup and
 # easy comparison, but V27 keeps this entire expansion guide disabled.
@@ -209,20 +216,20 @@ EXPANSION_MAX_DISTANCE_MM = 1600.0
 EXPANSION_FALLOFF_POWER = 1.0
 
 # Stage offsets are relative to Scene Start.
-EXPANSION_RAMP_START = 29
-EXPANSION_RAMP_END = 39
-EXPANSION_HOLD_END = 44
-EXPANSION_SUSTAIN_START = 46
-EXPANSION_RELEASE_START = 46
-EXPANSION_RELEASE_END = 49
+EXPANSION_RAMP_START = 17
+EXPANSION_RAMP_END = 23
+EXPANSION_HOLD_END = 26
+EXPANSION_SUSTAIN_START = 28
+EXPANSION_RELEASE_START = 28
+EXPANSION_RELEASE_END = 29
 
 # Legacy Wind timing retained only for cleaning up older generated fields.
-REAR_DRAG_START = 17
-REAR_DRAG_RAMP_START = 23
-REAR_DRAG_RAMP_END = 35
-REAR_DRAG_HOLD_END = 40
-REAR_DRAG_RELEASE_END = 46
-REAR_DRAG_SUSTAIN_END = 49
+REAR_DRAG_START = 10
+REAR_DRAG_RAMP_START = 14
+REAR_DRAG_RAMP_END = 21
+REAR_DRAG_HOLD_END = 24
+REAR_DRAG_RELEASE_END = 28
+REAR_DRAG_SUSTAIN_END = 29
 
 # Print one compact line per evaluated frame so the active guide forces can be
 # checked in Blender's System Console while playing or baking the simulation.
@@ -244,7 +251,7 @@ ENABLE_POST_CLOTH_SEAM_WELD = True
 SEAM_WELD_MODIFIER_NAME = "CC Post-Cloth Seam Weld"
 SEAM_WELD_GROUP_NAME = "CC_SEAM_WELD"
 SEAM_WELD_DISTANCE_MM = 6.0
-SEAM_WELD_ENABLE_OFFSET = 35
+SEAM_WELD_ENABLE_OFFSET = 21
 ABORT_ON_SEWING_HUBS = True
 MAX_SEWING_CONNECTORS_PER_VERTEX = 2
 
@@ -333,6 +340,389 @@ def get_or_create_display_subsurf(obj):
     return modifier
 
 
+# >>> CC MARK OVERLAY >>>
+# Shared mark scheme. Keep this block identical in mirror_markers.py,
+# door_maker.py, plates_maker.py, cloth.py and cloth_fit_test.py so each script
+# still runs on its own from Blender's Text Editor.
+#
+# A mark is a FLOAT2 face-corner attribute ``cc_mark_<kind>`` holding each
+# corner's normalized position inside the mark (inside means |u|, |v| < 1) plus
+# a color stored in the object's ``cc_mark_colors`` property. mark_rebuild()
+# derives everything else from those attributes, so any script can rebuild
+# without losing the marks written by another:
+# * faces touching a mark receive a copy of their base material whose Base
+#   Color is overlaid by a per-pixel ``max(|u|, |v|) < 1`` test for every mark,
+#   giving straight edges that follow the Cloth deformation;
+# * Solid view cannot run shader nodes, so each overlay material also holds an
+#   unlinked, active Image Texture (Closest) whose centre 2x2 texels are the
+#   mark color, sampled through the active ``cc_mark_uv`` UV map.
+# No geometry, mass, collision, constraints or modifiers are added.
+MARK_ATTRIBUTE_PREFIX = "cc_mark_"
+MARK_COLORS_PROPERTY = "cc_mark_colors"
+MARK_OVERLAY_BASE_PROPERTY = "cc_marker_base_material"
+MARK_OVERLAY_KIND_PROPERTY = "cc_marker_kind"
+MARK_SOLID_UV_LAYER = "cc_mark_uv"
+MARK_SOLID_TEXTURE_SIZE = 64  # the mark covers the centre 2x2 texels
+MARK_OUTSIDE = 1.0e3
+MARK_BASE_MATERIAL = "CC Cloth Base"
+MARK_DEFAULT_BASE_COLOR = (0.18, 0.22, 0.28, 1.0)
+# Per-face marker materials and slot properties written by earlier versions.
+MARK_LEGACY_MATERIALS = {
+    "CC Mirror Position Mark",
+    "CC Charge Port Position Mark",
+    "CC Door Position Mark",
+    "CC Plate Opening Mockup",
+    "CC Seam Color Mark",
+    "CC Quick Fit Seam Preview",
+}
+MARK_LEGACY_PROPERTIES = (
+    "cc_mirror_marker_material_slot",
+    "cc_door_marker_material_slot",
+    "cc_plates_material_slot",
+    "cc_seam_marker_material_slot",
+)
+
+
+def mark_write(obj, kind, values, color):
+    """Store one mark: flat (u, v) pairs per face corner and its RGBA color."""
+    mesh = obj.data
+    name = MARK_ATTRIBUTE_PREFIX + kind
+    attribute = mesh.attributes.get(name)
+    if attribute is not None and (
+        attribute.domain != "CORNER" or attribute.data_type != "FLOAT2"
+    ):
+        mesh.attributes.remove(attribute)
+        attribute = None
+    if attribute is None:
+        attribute = mesh.attributes.new(name, "FLOAT2", "CORNER")
+    attribute.data.foreach_set("vector", values)
+    colors = _mark_colors(obj)
+    colors[kind] = [float(value) for value in color]
+    obj[MARK_COLORS_PROPERTY] = colors
+
+
+def mark_remove(obj, kind):
+    attribute = obj.data.attributes.get(MARK_ATTRIBUTE_PREFIX + kind)
+    if attribute is not None:
+        obj.data.attributes.remove(attribute)
+    colors = _mark_colors(obj)
+    if colors.pop(kind, None) is not None:
+        obj[MARK_COLORS_PROPERTY] = colors
+
+
+def mark_touches(values, loop_indices):
+    """True when the corner coordinates' bounding box meets the mark."""
+    us = [values[index * 2] for index in loop_indices]
+    vs = [values[index * 2 + 1] for index in loop_indices]
+    return min(us) <= 1.0 and max(us) >= -1.0 and min(vs) <= 1.0 and max(vs) >= -1.0
+
+
+def mark_rebuild(obj):
+    """Reassign overlay materials and the Solid-view UV map from all marks.
+
+    Returns {polygon index: kind shown in Solid view}.
+    """
+    mesh = obj.data
+    kinds = _mark_kinds(obj)
+    overlay_slots = {
+        index for index, material in enumerate(mesh.materials)
+        if material is not None and (
+            MARK_OVERLAY_BASE_PROPERTY in material
+            or material.name in MARK_LEGACY_MATERIALS
+        )
+    }
+    fallback_slot = _mark_base_slot(obj, overlay_slots)
+    # Return faces of earlier runs to their base material; legacy per-face
+    # marker materials go to the fallback slot.
+    restore = {}
+    for slot in overlay_slots:
+        base_name = mesh.materials[slot].get(MARK_OVERLAY_BASE_PROPERTY)
+        base = bpy.data.materials.get(base_name) if base_name else None
+        restore[slot] = _mark_material_slot(obj, base) if base else fallback_slot
+    for polygon in mesh.polygons:
+        if polygon.material_index in restore:
+            polygon.material_index = restore[polygon.material_index]
+    for name in MARK_LEGACY_PROPERTIES:
+        if name in obj:
+            del obj[name]
+
+    coordinates = {}
+    for kind in kinds:
+        values = [0.0] * (len(mesh.loops) * 2)
+        mesh.attributes[MARK_ATTRIBUTE_PREFIX + kind].data.foreach_get("vector", values)
+        coordinates[kind] = values
+    solid_uv = [0.0] * (len(mesh.loops) * 2)
+    overlays = {}
+    marked = {}
+    for polygon in mesh.polygons:
+        loop_indices = polygon.loop_indices
+        # A face touching several marks shows the first one in Solid view;
+        # rendering shows all of them.
+        kind = next(
+            (kind for kind, values in coordinates.items()
+             if mark_touches(values, loop_indices)),
+            None,
+        )
+        if kind is None:
+            continue
+        values = coordinates[kind]
+        for index in loop_indices:
+            solid_uv[index * 2:index * 2 + 2] = _mark_solid_uv(
+                values[index * 2], values[index * 2 + 1]
+            )
+        key = (polygon.material_index, kind)
+        if key not in overlays:
+            base = mesh.materials[key[0]] if key[0] < len(mesh.materials) else None
+            overlays[key] = _mark_material_slot(
+                obj, _mark_overlay_material(base, kinds, kind)
+            )
+        polygon.material_index = overlays[key]
+        marked[polygon.index] = kind
+
+    layer = mesh.uv_layers.get(MARK_SOLID_UV_LAYER) or mesh.uv_layers.new(
+        name=MARK_SOLID_UV_LAYER
+    )
+    layer.data.foreach_set("uv", solid_uv)
+    # Solid view samples the active UV map and ignores UV Map nodes. The
+    # render-active map is left unchanged so other textures keep their UVs.
+    mesh.uv_layers.active = layer
+    mesh.update()
+    return marked
+
+
+def mark_show_solid_texture(context):
+    """Switch open 3D views to Solid Color = Texture so marks are visible."""
+    screen = getattr(context, "screen", None)
+    for area in screen.areas if screen else ():
+        if area.type == "VIEW_3D":
+            area.spaces.active.shading.color_type = "TEXTURE"
+
+
+def mark_evaluated_vertices(obj):
+    """World positions of the base-mesh vertices at the current frame.
+
+    Modifiers after Cloth (the post-Cloth seam Weld, display Subdivision, ...)
+    can change the evaluated topology at frame n. They are switched off only
+    while sampling, so the Cloth result is read on the base topology; the Cloth
+    cache up to the current frame is kept and the marks, stored on base-mesh
+    corners, are carried through those modifiers again for display.
+    """
+    cloth_index = next(
+        (index for index, modifier in enumerate(obj.modifiers) if modifier.type == "CLOTH"),
+        len(obj.modifiers),
+    )
+    downstream = [
+        modifier for modifier in list(obj.modifiers)[cloth_index + 1:]
+        if modifier.show_viewport
+    ]
+    disabled = []
+    try:
+        while True:
+            depsgraph = bpy.context.evaluated_depsgraph_get()
+            evaluated = obj.evaluated_get(depsgraph)
+            mesh = evaluated.to_mesh(preserve_all_data_layers=True, depsgraph=depsgraph)
+            try:
+                if (
+                    len(mesh.vertices) == len(obj.data.vertices)
+                    and len(mesh.polygons) == len(obj.data.polygons)
+                ):
+                    matrix = evaluated.matrix_world
+                    return [matrix @ vertex.co for vertex in mesh.vertices]
+            finally:
+                evaluated.to_mesh_clear()
+            if disabled or not downstream:
+                raise RuntimeError(
+                    "评估网格与基础网格拓扑不一致，且不是 Cloth 之后的修改器造成的；"
+                    "请检查 Cloth 之前改变拓扑的修改器。"
+                )
+            for modifier in downstream:
+                modifier.show_viewport = False
+            disabled = downstream
+    finally:
+        for modifier in disabled:
+            modifier.show_viewport = True
+
+
+def _mark_colors(obj):
+    stored = obj.get(MARK_COLORS_PROPERTY)
+    if not hasattr(stored, "items"):
+        return {}
+    return {str(kind): [float(value) for value in color] for kind, color in stored.items()}
+
+
+def _mark_kinds(obj):
+    kinds = {}
+    for kind, color in sorted(_mark_colors(obj).items()):
+        attribute = obj.data.attributes.get(MARK_ATTRIBUTE_PREFIX + kind)
+        if (
+            attribute is not None
+            and attribute.domain == "CORNER"
+            and attribute.data_type == "FLOAT2"
+        ):
+            kinds[kind] = tuple(color)
+    return kinds
+
+
+def _mark_material_slot(obj, material):
+    for index, slot_material in enumerate(obj.data.materials):
+        if slot_material == material:
+            return index
+    obj.data.materials.append(material)
+    return len(obj.data.materials) - 1
+
+
+def _mark_base_slot(obj, excluded_slots=()):
+    existing = next(
+        (index for index in range(len(obj.data.materials)) if index not in excluded_slots),
+        None,
+    )
+    if existing is not None:
+        return existing
+    base = bpy.data.materials.get(MARK_BASE_MATERIAL)
+    if base is None:
+        base = bpy.data.materials.new(MARK_BASE_MATERIAL)
+        base.diffuse_color = MARK_DEFAULT_BASE_COLOR
+    obj.data.materials.append(base)
+    return len(obj.data.materials) - 1
+
+
+def _mark_principled(material):
+    if material is None or material.node_tree is None:
+        return None
+    return next(
+        (node for node in material.node_tree.nodes if node.type == "BSDF_PRINCIPLED"),
+        None,
+    )
+
+
+def _mark_mask_factor(nodes, links, attribute_name, x, y):
+    """Return a socket that is 1 inside the normalized mark, else 0."""
+    attribute = nodes.new("ShaderNodeAttribute")
+    attribute.attribute_type = "GEOMETRY"
+    attribute.attribute_name = attribute_name
+    attribute.location = (x, y)
+    separate = nodes.new("ShaderNodeSeparateXYZ")
+    separate.location = (x + 180, y)
+    links.new(attribute.outputs["Vector"], separate.inputs[0])
+    components = []
+    for offset, name in enumerate(("X", "Y")):
+        absolute = nodes.new("ShaderNodeMath")
+        absolute.operation = "ABSOLUTE"
+        absolute.location = (x + 360, y - offset * 160)
+        links.new(separate.outputs[name], absolute.inputs[0])
+        components.append(absolute.outputs[0])
+    largest = nodes.new("ShaderNodeMath")
+    largest.operation = "MAXIMUM"
+    largest.location = (x + 540, y)
+    links.new(components[0], largest.inputs[0])
+    links.new(components[1], largest.inputs[1])
+    inside = nodes.new("ShaderNodeMath")
+    inside.operation = "LESS_THAN"
+    inside.inputs[1].default_value = 1.0
+    inside.location = (x + 720, y)
+    links.new(largest.outputs[0], inside.inputs[0])
+    return inside.outputs[0]
+
+
+def _mark_solid_image(name, base_color, mark_color):
+    """Image whose centre 2x2 texels are the mark, sampled with Closest."""
+    size = MARK_SOLID_TEXTURE_SIZE
+    # Always start fresh: re-packing an already packed image after editing its
+    # pixels can store stale data.
+    previous = bpy.data.images.get(name)
+    if previous is not None:
+        bpy.data.images.remove(previous)
+    image = bpy.data.images.new(name, size, size, alpha=False, float_buffer=True)
+    pixels = [float(base_color[0]), float(base_color[1]), float(base_color[2]), 1.0] * (size * size)
+    mark = [float(mark_color[0]), float(mark_color[1]), float(mark_color[2]), 1.0]
+    for y in (size // 2 - 1, size // 2):
+        for x in (size // 2 - 1, size // 2):
+            start = (y * size + x) * 4
+            pixels[start:start + 4] = mark
+    image.pixels.foreach_set(pixels)
+    image.pack()  # generated images are otherwise lost when the .blend is saved
+    return image
+
+
+def _mark_solid_uv(u, v):
+    # Maps |u|, |v| <= 1 exactly onto the centre texels of the Solid image.
+    size = float(MARK_SOLID_TEXTURE_SIZE)
+    return 0.5 + u / size, 0.5 + v / size
+
+
+def _mark_overlay_material(base, kinds, kind):
+    """Copy ``base`` and overlay every mark mask on its Base Color."""
+    base_name = base.name if base is not None else ""
+    label = kind.replace("_", " ").title()
+    name = f"{base_name or MARK_BASE_MATERIAL} + CC {label} Mark"
+    if _mark_principled(base) is not None:
+        material = base.copy()
+    else:
+        material = bpy.data.materials.new(name)
+        material.use_nodes = True
+        color = tuple(base.diffuse_color) if base is not None else MARK_DEFAULT_BASE_COLOR
+        _mark_principled(material).inputs["Base Color"].default_value = color
+    material[MARK_OVERLAY_BASE_PROPERTY] = base_name
+    material[MARK_OVERLAY_KIND_PROPERTY] = kind
+
+    nodes = material.node_tree.nodes
+    links = material.node_tree.links
+    principled = _mark_principled(material)
+    base_input = principled.inputs["Base Color"]
+    if base_input.is_linked:
+        current = base_input.links[0].from_socket
+    else:
+        rgb = nodes.new("ShaderNodeRGB")
+        rgb.outputs[0].default_value = tuple(base_input.default_value)
+        rgb.location = (principled.location.x - 400, principled.location.y + 400)
+        current = rgb.outputs[0]
+
+    x = principled.location.x - 1400
+    for row, (mask_kind, mask_color) in enumerate(kinds.items()):
+        y = principled.location.y + 200 - row * 400
+        factor = _mark_mask_factor(nodes, links, MARK_ATTRIBUTE_PREFIX + mask_kind, x, y)
+        mix = nodes.new("ShaderNodeMix")
+        mix.data_type = "RGBA"
+        mix.location = (principled.location.x - 220, principled.location.y + 200 - row * 220)
+        mix.inputs[7].default_value = mask_color
+        links.new(factor, mix.inputs[0])
+        links.new(current, mix.inputs[6])
+        current = mix.outputs[2]
+    links.new(current, base_input)
+    # Solid view draws unmarked faces with diffuse_color, so the Solid image
+    # uses it as background to blend with neighbouring faces.
+    solid_base = tuple(base.diffuse_color) if base is not None else MARK_DEFAULT_BASE_COLOR
+    material.diffuse_color = solid_base
+
+    # Solid-view preview only: left unlinked so EEVEE/Cycles ignore it.
+    preview = nodes.new("ShaderNodeTexImage")
+    preview.name = preview.label = "CC Solid View Mark"
+    preview.image = _mark_solid_image(name, solid_base, kinds[kind])
+    preview.interpolation = "Closest"
+    preview.extension = "EXTEND"
+    preview.location = (principled.location.x - 700, principled.location.y + 700)
+    for node in nodes:
+        node.select = False
+    preview.select = True
+    nodes.active = preview
+
+    existing = bpy.data.materials.get(name)
+    if existing is not None and existing != material:
+        existing.user_remap(material)
+        bpy.data.materials.remove(existing)
+    material.name = name
+    return material
+# <<< CC MARK OVERLAY <<<
+
+
+# >>> CC SEAM MARK >>>
+# Semantic seams drawn as a CC mark. Keep this block identical in cloth.py and
+# cloth_fit_test.py. Every face touching a seam vertex stores, per corner, the
+# rest-pose distance to the nearby seam edges divided by the band width, so the
+# mask |u| < 1 draws a straight band along each side of the seam.
+SEAM_MARK_KIND = "seam"
+
+
 def is_semantic_seam_group(name):
     """Identify seam paths while excluding their single-vertex A/B markers."""
 
@@ -344,35 +734,8 @@ def is_semantic_seam_group(name):
     return seam_id.startswith("S") and seam_id[1:].isdigit()
 
 
-def get_or_create_color_material(name, color, roughness):
-    """Create an idempotent viewport/render material, like mirror markers."""
-
-    material = bpy.data.materials.get(name) or bpy.data.materials.new(name)
-    material.diffuse_color = color
-    material.use_nodes = True
-    nodes = material.node_tree.nodes
-    shader = nodes.get("Principled BSDF")
-    if shader is not None:
-        shader.inputs["Base Color"].default_value = color
-        shader.inputs["Roughness"].default_value = roughness
-        if "Emission Color" in shader.inputs:
-            shader.inputs["Emission Color"].default_value = color
-            shader.inputs["Emission Strength"].default_value = 0.12
-    return material
-
-
-def material_slot(obj, material):
-    """Return a stable material slot without disturbing existing markers."""
-
-    for index, slot_material in enumerate(obj.data.materials):
-        if slot_material == material:
-            return index
-    obj.data.materials.append(material)
-    return len(obj.data.materials) - 1
-
-
-def semantic_seam_faces(obj):
-    """Find faces containing an edge from any semantic seam vertex group."""
+def semantic_seam_edges(obj):
+    """Return face edges lying on one semantic seam group, and the seam vertex count."""
 
     seam_groups = [
         group for group in obj.vertex_groups if is_semantic_seam_group(group.name)
@@ -391,31 +754,87 @@ def semantic_seam_faces(obj):
             )
         }
 
-    marked_faces = set()
-    marked_vertices = set().union(*vertices_by_group.values())
+    edges = set()
     for polygon in obj.data.polygons:
         vertices = tuple(polygon.vertices)
-        polygon_edges = zip(vertices, vertices[1:] + vertices[:1])
-        if any(
-            first in group_vertices and second in group_vertices
-            for first, second in polygon_edges
-            for group_vertices in vertices_by_group.values()
-        ):
-            marked_faces.add(polygon.index)
-    return marked_faces, len(marked_vertices)
+        for first, second in zip(vertices, vertices[1:] + vertices[:1]):
+            if any(
+                first in group_vertices and second in group_vertices
+                for group_vertices in vertices_by_group.values()
+            ):
+                edges.add((min(first, second), max(first, second)))
+    return edges, len(set().union(*vertices_by_group.values()))
+
+
+def seam_mark_coordinates(obj, edges, width):
+    """Return flat corner (u, v) mark values and the number of touched faces."""
+
+    mesh = obj.data
+    points = [obj.matrix_world @ vertex.co for vertex in mesh.vertices]
+    edges_by_vertex = {}
+    for edge in edges:
+        for vertex_index in edge:
+            edges_by_vertex.setdefault(vertex_index, []).append(edge)
+    values = [MARK_OUTSIDE] * (len(mesh.loops) * 2)
+    faces = 0
+    for polygon in mesh.polygons:
+        nearby = {
+            edge for vertex_index in polygon.vertices
+            for edge in edges_by_vertex.get(vertex_index, ())
+        }
+        if not nearby:
+            continue
+        for loop_index in polygon.loop_indices:
+            point = points[mesh.loops[loop_index].vertex_index]
+            distance = min(
+                _segment_distance(point, points[first], points[second])
+                for first, second in nearby
+            )
+            values[loop_index * 2] = distance / width
+            values[loop_index * 2 + 1] = 0.0
+        faces += mark_touches(values, polygon.loop_indices)
+    return values, faces
+
+
+def _segment_distance(point, start, end):
+    direction = end - start
+    length_squared = direction.length_squared
+    factor = 0.0
+    if length_squared > 0.0:
+        factor = max(0.0, min(1.0, (point - start).dot(direction) / length_squared))
+    return (point - (start + direction * factor)).length
+# <<< CC SEAM MARK <<<
+
+
+def get_or_create_color_material(name, color, roughness):
+    """Create an idempotent viewport/render base material."""
+
+    material = bpy.data.materials.get(name) or bpy.data.materials.new(name)
+    material.diffuse_color = color
+    material.use_nodes = True
+    nodes = material.node_tree.nodes
+    shader = nodes.get("Principled BSDF")
+    if shader is not None:
+        shader.inputs["Base Color"].default_value = color
+        shader.inputs["Roughness"].default_value = roughness
+        if "Emission Color" in shader.inputs:
+            shader.inputs["Emission Color"].default_value = color
+            shader.inputs["Emission Strength"].default_value = 0.12
+    return material
 
 
 def configure_seam_texture(obj):
-    """Color existing faces beside semantic seam edges without adding physics."""
+    """Draw semantic seams as a CC mark band without adding physics."""
 
     if not ENABLE_SEAM_TEXTURE:
         return "disabled"
-    marked_faces, seam_vertices = semantic_seam_faces(obj)
+    edges, seam_vertices = semantic_seam_edges(obj)
     if not seam_vertices:
         status = "missing semantic Sxxx_* / SEAM_* vertex groups"
         obj["cloth_seam_texture_status"] = status
         return status
-    if not marked_faces:
+    values, touched = seam_mark_coordinates(obj, edges, SEAM_MARK_WIDTH_MM / 1000.0)
+    if not touched:
         status = f"semantic seams found ({seam_vertices} vertices), but no seam faces"
         obj["cloth_seam_texture_status"] = status
         return status
@@ -423,35 +842,21 @@ def configure_seam_texture(obj):
     base_material = get_or_create_color_material(
         BASE_MATERIAL_NAME, FABRIC_COLOR, FABRIC_ROUGHNESS
     )
-    seam_material = get_or_create_color_material(
-        SEAM_MATERIAL_NAME, SEAM_COLOR, 0.48
+    if not obj.data.materials:
+        obj.data.materials.append(base_material)
+    mark_write(obj, SEAM_MARK_KIND, values, SEAM_COLOR)
+    marked_faces = sorted(
+        index for index, kind in mark_rebuild(obj).items() if kind == SEAM_MARK_KIND
     )
-    base_slot = material_slot(obj, base_material)
-    seam_slot = material_slot(obj, seam_material)
+    mark_show_solid_texture(bpy.context)
 
-    # Repair assignments made by the former whole-object seam shader and clear
-    # only our own previous marks. Other face markers remain untouched.
-    previous_faces = {
-        int(value) for value in str(obj.get(SEAM_FACE_PROPERTY, "")).split(",")
-        if value.strip().isdigit()
-    }
-    for polygon in obj.data.polygons:
-        if polygon.material_index == seam_slot and (
-            not previous_faces or polygon.index in previous_faces
-        ):
-            polygon.material_index = base_slot
-    for face_index in marked_faces:
-        obj.data.polygons[face_index].material_index = seam_slot
-
-    obj["cloth_seam_texture"] = seam_material.name
-    obj[SEAM_MATERIAL_SLOT_PROPERTY] = seam_slot
-    obj[SEAM_FACE_PROPERTY] = ",".join(str(i) for i in sorted(marked_faces))
+    obj["cloth_seam_texture"] = MARK_ATTRIBUTE_PREFIX + SEAM_MARK_KIND
+    obj[SEAM_FACE_PROPERTY] = ",".join(str(i) for i in marked_faces)
     obj["cloth_seam_mask_vertex_count"] = seam_vertices
     obj["cloth_seam_marker_face_count"] = len(marked_faces)
-    obj.data.update()
     status = (
-        f"{seam_material.name} ({len(marked_faces)} faces, "
-        f"{seam_vertices} vertices)"
+        f"{MARK_ATTRIBUTE_PREFIX + SEAM_MARK_KIND} ({len(marked_faces)} faces, "
+        f"{seam_vertices} vertices, {SEAM_MARK_WIDTH_MM:g} mm band)"
     )
     obj["cloth_seam_texture_status"] = status
     return status
@@ -1190,6 +1595,8 @@ def ensure_roof_pin_group(obj):
     """Return or create a small center anchor on the semantic TOP panel."""
 
     group = obj.vertex_groups.get(PIN_GROUP_NAME)
+    if not ENABLE_ROOF_PIN_DURING_SIMULATION:
+        return group, [], "disabled (ENABLE_ROOF_PIN_DURING_SIMULATION=False)"
     existing = (
         vertex_indices_in_groups(obj, (PIN_GROUP_NAME,))
         if group is not None
@@ -2724,9 +3131,9 @@ def apply_preset(obj, measured_difference_mm=None):
 
 
 
-# Optional late-stage HEM leveling is deliberately off in the 50-frame preset:
+# Optional late-stage HEM leveling is deliberately off in the 30-frame preset:
 # it requires a complete trajectory resample and per-frame shape keys.  Keep
-# the cleanup-capable implementation below so rerunning V29 removes V28 data.
+# the cleanup-capable implementation below so rerunning V30 removes V28 data.
 ENABLE_HEM_LEVEL_FEEDBACK = False
 HEM_FEEDBACK_START = 0
 HEM_FEEDBACK_RAMP = 0
@@ -2998,15 +3405,61 @@ def main():
         for object_name in baked_objects:
             print(f"  - {object_name}")
         print(
-            "请先执行 Physics > Cache > Delete Bake/Free Bake，再重新运行 V27，"
+            "请先执行 Physics > Cache > Delete Bake/Free Bake，再重新运行本脚本，"
             "然后回到第 1 帧模拟。"
         )
 
     print("")
-    print("V29: 50-frame simplified sew/drape; late HEM trajectory sampling is disabled.")
+    print("V30: 30-frame simplified sew/drape; late HEM trajectory sampling is disabled.")
     print("Clear Cloth cache and replay sequentially from Scene Start. Rerun after geometry changes.")
 
 
 
+class CC_OT_setup_cloth(bpy.types.Operator):
+    """设置车罩 Cloth 预设"""
+
+    bl_idname = "cc.setup_cloth"
+    bl_label = f"车罩 Cloth 设置（{PRESET_NAME}）"
+    bl_options = {"REGISTER", "UNDO"}
+
+    roof_pin: bpy.props.BoolProperty(
+        name="固定车顶顶点",
+        description="缝合初期临时固定 PANEL_TOP 中心顶点 (PIN_ROOF)；关闭则车顶顶点完全自由",
+        default=ENABLE_ROOF_PIN_DURING_SIMULATION,
+    )
+
+    def execute(self, context):
+        global ENABLE_ROOF_PIN_DURING_SIMULATION
+        ENABLE_ROOF_PIN_DURING_SIMULATION = self.roof_pin
+        try:
+            main()
+        except (RuntimeError, ValueError) as error:
+            # Report in Blender instead of raising, so an attached debugger
+            # does not stop in this Text block, which has no source file.
+            self.report({"ERROR"}, str(error))
+            print(f"[CC CLOTH ERROR] {error}")
+            return {"CANCELLED"}
+        pin = "开启" if self.roof_pin else "关闭"
+        self.report({"INFO"}, f"Cloth 设置完成（车顶顶点固定：{pin}）；从第 1 帧开始播放")
+        return {"FINISHED"}
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self, width=420)
+
+
+def launch_cloth_dialog():
+    """Register safely on repeated Text Editor runs and open the settings dialog."""
+    previous = getattr(bpy.types, CC_OT_setup_cloth.__name__, None)
+    if previous is not None:
+        try:
+            bpy.utils.unregister_class(previous)
+        except RuntimeError:
+            pass
+    bpy.utils.register_class(CC_OT_setup_cloth)
+    if bpy.app.background:
+        return main()
+    return bpy.ops.cc.setup_cloth("INVOKE_DEFAULT")
+
+
 if __name__ == "__main__":
-    main()
+    launch_cloth_dialog()

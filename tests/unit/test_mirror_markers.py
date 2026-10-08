@@ -34,7 +34,46 @@ class MirrorMarkerTests(unittest.TestCase):
         self.assertNotIn("modifiers.new", source)
         self.assertNotIn("polygons.add", source)
         self.assertNotIn("vertices.add", source)
-        self.assertIn("_ensure_base_slot", source)
+        self.assertIn("_mark_base_slot", source)
+
+
+class SharedMarkBlockTests(unittest.TestCase):
+    """Standalone scripts embed copies of the shared blocks; keep them in sync."""
+
+    BLOCKS = {
+        "CC MARK OVERLAY": (
+            "mirror_markers.py", "door_maker.py", "plates_maker.py",
+            "cloth.py", "cloth_fit_test.py",
+        ),
+        "CC SEAM MARK": ("cloth.py", "cloth_fit_test.py"),
+    }
+
+    @staticmethod
+    def _block(filename, marker):
+        source = (ROOT / "scripts" / "blender" / filename).read_text(encoding="utf-8")
+        start = source.index(f"# >>> {marker} >>>")
+        end = source.index(f"# <<< {marker} <<<")
+        return source[start:end]
+
+    def test_blocks_are_identical(self):
+        for marker, filenames in self.BLOCKS.items():
+            reference = self._block(filenames[0], marker)
+            for filename in filenames[1:]:
+                with self.subTest(marker=marker, filename=filename):
+                    self.assertEqual(self._block(filename, marker), reference)
+
+    def test_workflow_embeds_current_cloth_script(self):
+        import base64
+        import re
+        import zlib
+
+        workflow = (ROOT / "scripts" / "blender" / "svg_cloth_workflow.py").read_text(
+            encoding="utf-8"
+        )
+        payload = re.search(r'"setup_cloth.py": "([^"]*)"', workflow).group(1)
+        embedded = zlib.decompress(base64.b85decode(payload))
+        current = (ROOT / "scripts" / "blender" / "cloth.py").read_bytes()
+        self.assertEqual(embedded, current.replace(b"\r\n", b"\n"))
 
 
 if __name__ == "__main__":
