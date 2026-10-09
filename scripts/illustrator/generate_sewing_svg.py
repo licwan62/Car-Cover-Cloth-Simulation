@@ -7,6 +7,7 @@ never overwritten. Geometry is split, not fitted to a different car template.
 """
 
 import argparse
+import os
 import json
 from pathlib import Path
 import re
@@ -395,21 +396,29 @@ def default_output(source):
     return OUTPUT_DIR / parent / (source.stem + "_sewing.svg")
 
 
-def convert_file(source, destination=None, front="right", scale=10.0):
+def convert_file(source, destination=None, front="right", scale=10.0, overwrite=True):
     source = Path(source)
     destination = Path(destination) if destination else default_output(source)
     if source.resolve() == destination.resolve():
         raise ValueError("Output must differ from the original input")
-    if destination.exists():
+    if destination.exists() and not overwrite:
         raise FileExistsError(f"Output already exists: {destination}")
     root = read_ai(source) if source.suffix.lower() == ".ai" else ET.parse(source).getroot()
     output = convert_tree(root, front, scale)
     ET.register_namespace("", SVG)
     ET.indent(output, space="  ")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    # Exclusive creation prevents silently replacing an existing semantic file.
-    with destination.open("xb") as stream:
-        ET.ElementTree(output).write(stream, encoding="utf-8", xml_declaration=True)
+    # Write beside the destination, then swap it in: a failed write never
+    # leaves a truncated semantic file behind.
+    temporary = destination.with_name(destination.name + ".tmp")
+    try:
+        with temporary.open("wb") as stream:
+            ET.ElementTree(output).write(stream, encoding="utf-8", xml_declaration=True)
+        if not overwrite and destination.exists():
+            raise FileExistsError(f"Output already exists: {destination}")
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
     return destination
 
 
@@ -422,6 +431,8 @@ def main():
     parser.add_argument("--scale", type=float, default=10.0,
                         help="Illustrator scaleFactor for SVG input without width/height "
                              "(default: 10, Large Canvas; 1 for a normal document)")
+    parser.add_argument("--no-overwrite", action="store_true",
+                        help="Fail instead of replacing an existing *_sewing.svg (default: replace)")
     args = parser.parse_args()
     if not args.input:
         from tkinter import Tk, filedialog
@@ -444,14 +455,19 @@ def main():
         parser.error("--output requires exactly one input file")
     results = []
     for source in sources:
+        target = Path(args.output) if args.output else default_output(source)
+        replaced = target.exists()
         try:
-            output = convert_file(source, args.output, args.front, args.scale)
+            output = convert_file(source, args.output, args.front, args.scale,
+                                  overwrite=not args.no_overwrite)
         except (ValueError, OSError, ET.ParseError) as error:
             results.append(dict(source=str(source), status="failed", error=str(error)))
             print(f"FAILED {source.name}: {error}", flush=True)
         else:
-            results.append(dict(source=str(source), status="created", output=str(output)))
-            print(f"Created {output}: 3 PANEL, 4 SEAM (2 pairs), 4 HEM", flush=True)
+            results.append(dict(source=str(source), status="replaced" if replaced else "created",
+                                output=str(output)))
+            print(f"{'Replaced' if replaced else 'Created'} {output}: "
+                  "3 PANEL, 4 SEAM (2 pairs), 4 HEM", flush=True)
     if len(sources) > 1:
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         report = OUTPUT_DIR / "batch_report.json"

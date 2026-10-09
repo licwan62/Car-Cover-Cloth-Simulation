@@ -2,12 +2,14 @@
 
 This is a repository maintenance tool, not a Blender script. Run it with a
 regular Python interpreter whenever 001_remesh.py, 002_sew_from_svg.py, or
-003_cloth_setup.py changes.
+003_cloth_setup.py changes (003_cloth_setup.py carries the shared CC mark
+overlay used for seam marks).
 """
 
 import base64
 from pathlib import Path
 import re
+import sys
 import zlib
 
 
@@ -17,10 +19,16 @@ DEPENDENCIES = ("001_remesh.py", "002_sew_from_svg.py", "003_cloth_setup.py")
 
 
 def encode(filepath):
-    return base64.b85encode(zlib.compress(filepath.read_bytes(), level=9)).decode("ascii")
+    source = filepath.read_bytes()
+    return base64.b85encode(zlib.compress(source, level=9)).decode("ascii")
 
 
 def main():
+    if "bpy" in sys.modules:
+        raise RuntimeError(
+            "build_svg_to_cloth.py 是仓库维护工具，请在命令行用 "
+            "python 运行；在 Blender 中应运行 000_svg_to_cloth.py。"
+        )
     source = TARGET.read_text(encoding="utf-8")
     for filename in DEPENDENCIES:
         payload = encode(BLENDER_SCRIPTS / filename)

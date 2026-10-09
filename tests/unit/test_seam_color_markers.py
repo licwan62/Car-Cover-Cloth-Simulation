@@ -10,14 +10,14 @@ class SeamColorMarkerTests(unittest.TestCase):
     def setUp(self):
         path = Path(__file__).resolve().parents[2] / "scripts/blender/003_cloth_setup.py"
         tree = ast.parse(path.read_text(encoding="utf-8"))
-        wanted = {"is_semantic_seam_group", "semantic_seam_faces"}
+        wanted = {"is_semantic_seam_group", "semantic_seam_edges"}
         nodes = [
             node for node in tree.body
             if isinstance(node, ast.FunctionDef) and node.name in wanted
         ]
         namespace = {}
         exec(compile(ast.Module(body=nodes, type_ignores=[]), str(path), "exec"), namespace)
-        self.select = namespace["semantic_seam_faces"]
+        self.select = namespace["semantic_seam_edges"]
 
     def test_marks_only_faces_containing_a_semantic_seam_edge(self):
         groups = [SimpleNamespace(name="S001_TOP", index=2)]
@@ -37,9 +37,9 @@ class SeamColorMarkerTests(unittest.TestCase):
             data=SimpleNamespace(vertices=vertices, polygons=polygons),
         )
 
-        faces, vertex_count = self.select(obj)
+        edges, vertex_count = self.select(obj)
 
-        self.assertEqual(faces, {0})
+        self.assertEqual(edges, {(0, 1)})
         self.assertEqual(vertex_count, 3)
 
 

@@ -34,7 +34,31 @@ class MirrorMarkerTests(unittest.TestCase):
         self.assertNotIn("modifiers.new", source)
         self.assertNotIn("polygons.add", source)
         self.assertNotIn("vertices.add", source)
-        self.assertIn("_ensure_base_slot", source)
+        self.assertIn("_mark_base_slot", source)
+
+
+class SharedMarkBlockTests(unittest.TestCase):
+    """Numbered standalone scripts keep the embedded overlay block in sync."""
+
+    FILENAMES = (
+        "100_mirror_marks.py",
+        "101_door_marks.py",
+        "102_plate_marks.py",
+        "003_cloth_setup.py",
+    )
+
+    @staticmethod
+    def _block(filename):
+        source = (ROOT / "scripts" / "blender" / filename).read_text(encoding="utf-8")
+        start = source.index("# >>> CC MARK OVERLAY >>>")
+        end = source.index("# <<< CC MARK OVERLAY <<<")
+        return source[start:end]
+
+    def test_blocks_are_identical(self):
+        reference = self._block(self.FILENAMES[0])
+        for filename in self.FILENAMES[1:]:
+            with self.subTest(filename=filename):
+                self.assertEqual(self._block(filename), reference)
 
 
 if __name__ == "__main__":

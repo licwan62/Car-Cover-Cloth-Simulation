@@ -86,8 +86,13 @@ class SewingSVGTests(unittest.TestCase):
             # TOP waist must survive; it cannot become a straight Tesla edge.
             self.assertGreater(max(p[1] for p in seams["S001_TOP"])
                                - min(p[1] for p in seams["S001_TOP"]), 30)
+            # Default replaces an existing output; overwrite=False refuses.
+            output.write_text("stale", encoding="utf-8")
+            svg.convert_file(source, output)
+            self.assertNotEqual(output.read_text(encoding="utf-8"), "stale")
             with self.assertRaises(FileExistsError):
-                svg.convert_file(source, output)
+                svg.convert_file(source, output, overwrite=False)
+            self.assertEqual(list(Path(directory).glob("*.tmp")), [])
         self.assertEqual(source.read_bytes(), before)
 
     def test_split_top_accepts_consecutive_vertical_end_segments(self):
