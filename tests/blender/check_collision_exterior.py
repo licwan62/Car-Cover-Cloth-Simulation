@@ -68,6 +68,12 @@ bpy.context.view_layer.update()
 select([outer])
 centimetre_proxy = exterior.main()
 assert abs(centimetre_proxy.dimensions.x * 0.01 - 2) < 0.2
+shared = proxy.users_collection
+assert len(shared) == 1 and shared[0].get(exterior.GENERATED_TAG)
+assert list(centimetre_proxy.users_collection) == list(shared), "Colliders not grouped"
+other_scene = bpy.data.scenes.new("Other vehicle")
+assert exterior.collision_collection(other_scene) != shared[0], "Collider collection leaks across scenes"
+bpy.data.scenes.remove(other_scene)
 
 # Reject oversized grids and leave source selection/data untouched.
 exterior.MAX_GRID_CELLS = 1000

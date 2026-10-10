@@ -26,6 +26,7 @@ SMOOTH_FACTOR = 0.15
 COLLISION_THICKNESS_MM = 1.0
 GENERATED_TAG = "car_cover_generated_collision_proxy"
 SUFFIX = " Exterior Collision"
+COLLECTION_NAME = "CC Collision"
 
 
 def log(message):
@@ -42,6 +43,21 @@ def apply(obj, modifier):
     select_only(obj)
     if "FINISHED" not in bpy.ops.object.modifier_apply(modifier=modifier.name):
         raise RuntimeError(f"Failed to apply {modifier.name}")
+
+
+def collision_collection(scene):
+    """One collection per scene holds every generated collider.
+
+    Per-scene (not a global name lookup) so colliders never leak into another
+    vehicle's scene, where every Collision mesh would join the cloth solve.
+    """
+    for collection in scene.collection.children_recursive:
+        if collection.get(GENERATED_TAG):
+            return collection
+    collection = bpy.data.collections.new(COLLECTION_NAME)
+    collection[GENERATED_TAG] = True
+    scene.collection.children.link(collection)
+    return collection
 
 
 def source_trees(sources):
@@ -239,7 +255,7 @@ def main():
         mesh = boundary_mesh(grid, origin, voxel)
         basis = active if active in sources else sources[0]
         obj = bpy.data.objects.new(basis.name + SUFFIX, mesh)
-        bpy.context.scene.collection.objects.link(obj)
+        collision_collection(bpy.context.scene).objects.link(obj)
         log("Remeshing the envelope and removing enclosed/disconnected surfaces")
         modifier = obj.modifiers.new("Exterior envelope remesh", "REMESH")
         modifier.mode = "VOXEL"
