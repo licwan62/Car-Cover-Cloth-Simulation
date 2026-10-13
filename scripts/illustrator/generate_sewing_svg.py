@@ -149,13 +149,31 @@ def assign_panel_ids_by_y(root):
     the semantic layer names but retained the usual horizontal layout: upper
     side panel, centre roof panel, lower side panel.  SVG Y increases
     downward.  An already named PANEL_* element counts as one outline (its
-    children are not candidates) and must agree with its vertical position.
+    children are not candidates).  If any existing name disagrees with its
+    vertical position (e.g. Illustrator's duplicate "PANEL_RIGHT-2"), the
+    names are untrustworthy: all PANEL_* names are dropped and the three
+    outlines are recognized as if the input had no semantics.
     """
+    try:
+        return _assign_panel_ids_by_y(root, use_existing=True)
+    except ValueError as error:
+        if not any(element.get("id", "").startswith("PANEL_")
+                   for element in root.iter()):
+            raise
+        print(f"  Ignoring existing PANEL names ({error}); "
+              "assigning by vertical position", flush=True)
+    for element in root.iter():
+        if element.get("id", "").startswith("PANEL_"):
+            del element.attrib["id"]
+    return _assign_panel_ids_by_y(root, use_existing=False)
+
+
+def _assign_panel_ids_by_y(root, use_existing):
     candidates = []
 
     def visit(element):
         kind = element.tag.rsplit("}", 1)[-1]
-        named = element.get("id", "").startswith("PANEL_")
+        named = use_existing and element.get("id", "").startswith("PANEL_")
         if named or kind in {"path", "rect"}:
             segments = contour(element)
             points = [point for start, end, controls in segments
@@ -291,12 +309,13 @@ def convert_tree(root, front="right", scale=10.0):
 
     # Flat Illustrator SVG exports may lose some or all semantic names.
     # Restore missing names from the established vertical layout before
-    # collecting panels.  Fully named inputs are left untouched.
-    panel_ids = {
+    # collecting panels.  Exactly named inputs are left untouched; extra or
+    # renamed duplicates (e.g. "PANEL_RIGHT-2") go through recognition too.
+    panel_ids = [
         element.get("id") for element in root.iter()
         if element.get("id", "").startswith("PANEL_")
-    }
-    if not {"PANEL_TOP", "PANEL_LEFT", "PANEL_RIGHT"} <= panel_ids:
+    ]
+    if sorted(panel_ids) != ["PANEL_LEFT", "PANEL_RIGHT", "PANEL_TOP"]:
         assign_panel_ids_by_y(root)
 
     panels = {}

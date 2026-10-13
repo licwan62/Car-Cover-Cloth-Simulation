@@ -1,6 +1,8 @@
 import ast
 from collections import defaultdict
+import contextlib
 import importlib.util
+import io
 import os
 from pathlib import Path
 import re
@@ -151,17 +153,38 @@ class SewingSVGTests(unittest.TestCase):
         root.set("height", "1m")
         self.assertEqual(svg.physical_size(root), {"width": "5m", "height": "1m"})
 
-    def test_partially_named_panel_in_wrong_position_fails(self):
+    def test_misplaced_panel_names_fall_back_to_anonymous_recognition(self):
         root = ET.fromstring("""
             <svg xmlns="http://www.w3.org/2000/svg">
-              <g id="PANEL_TOP"><path d="M0 0H100L90 20H10Z"/></g>
+              <g id="PANEL_RIGHT-2"><path d="M0 0H100L90 20H10Z"/></g>
               <path d="M0 40V50H100V40Z"/>
-              <path d="M0 70H100L90 90H10Z"/>
+              <path id="PANEL_RIGHT" d="M0 70H100L90 90H10Z"/>
             </svg>
         """)
 
-        with self.assertRaisesRegex(ValueError, "PANEL_TOP is positioned"):
+        with contextlib.redirect_stdout(io.StringIO()) as stdout:
             svg.convert_tree(root)
+
+        self.assertIn("Ignoring existing PANEL names", stdout.getvalue())
+        self.assertIsNone(root[0].get("id"))
+        self.assertEqual(
+            [root[0][0].get("id"), root[1].get("id"), root[2].get("id")],
+            ["PANEL_LEFT", "PANEL_TOP", "PANEL_RIGHT"],
+        )
+
+    def test_extra_duplicate_panel_name_falls_back(self):
+        root = ET.fromstring("""
+            <svg xmlns="http://www.w3.org/2000/svg">
+              <path id="PANEL_TOP" d="M0 0H100L90 20H10Z"/>
+              <path id="PANEL_LEFT" d="M0 40V50H100V40Z"/>
+              <path id="PANEL_RIGHT" d="M0 70H100L90 90H10Z"/>
+              <path id="PANEL_RIGHT-2" d="M0 100H100L90 120H10Z"/>
+            </svg>
+        """)
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(ValueError, "exactly three"):
+                svg.convert_tree(root)
 
     def test_smooth_curve_reflects_control_and_roundtrips(self):
         segments = svg.parse_path("M0 0 C1 0 2 1 3 1 s2 1 3 0 L0 0Z")

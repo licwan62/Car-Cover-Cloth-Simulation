@@ -88,8 +88,9 @@ class ProjectConfigTests(unittest.TestCase):
                 except (ValueError, TypeError):
                     pass
 
-        self.assertEqual(constants["PRESET_NAME"], "CarCover_Simplified_50F_V29")
-        self.assertEqual(constants["SIMULATION_END_OFFSET"], 49)
+        self.assertEqual(constants["PRESET_NAME"], "CarCover_Simplified_15F_V31")
+        self.assertEqual(constants["SIMULATION_END_OFFSET"], 14)
+        self.assertTrue(constants["ENABLE_ROOF_PIN_DURING_SIMULATION"])
         self.assertFalse(constants["ENABLE_HEM_LEVEL_FEEDBACK"])
         self.assertFalse(constants["ENABLE_HEM_DRAG"])
         self.assertTrue(constants["ENABLE_POST_CLOTH_SEAM_WELD"])

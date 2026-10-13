@@ -25,6 +25,8 @@ CONFIG = load_json("simulation.json")["mirror_markers"]
 
 
 if __name__ == "__main__":
-    # Reuse the standalone implementation with the project JSON settings.
-    marker_impl = load_blender_script("100_mirror_marks.py")
-    marker_impl.apply_mirror_markers(config=CONFIG)
+    # Reuse the standalone implementation with the project JSON settings;
+    # door and plate marks are left untouched.
+    marker_impl = load_blender_script("100_marks.py")
+    for cloth in marker_impl.target_cloths():
+        marker_impl.apply_mirror_markers(cloth, CONFIG)

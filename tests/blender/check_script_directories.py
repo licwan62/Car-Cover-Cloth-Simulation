@@ -84,7 +84,7 @@ def check_module_search_path():
     import seam_naming  # noqa: F401
 
     check(project_config.PROJECT_ROOT == PROJECT_ROOT, "project_config finds project root")
-    marks = project_config.load_blender_script("100_mirror_marks.py")
+    marks = project_config.load_blender_script("100_marks.py")
     check(
         callable(getattr(marks, "apply_mirror_markers", None)),
         "load_blender_script loads numbered scripts/blender files",

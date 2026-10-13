@@ -1,3 +1,4 @@
+import ast
 import json
 from pathlib import Path
 import unittest
@@ -17,18 +18,47 @@ class MirrorMarkerTests(unittest.TestCase):
         self.assertEqual(markers["charge_port"]["height_from_bottom_mm"], 820.0)
         self.assertIn(markers["front_axis"], {"+X", "-X", "+Y", "-Y"})
 
+    def test_mirror_is_half_ellipse_430_by_300(self):
+        config = json.loads((ROOT / "config" / "simulation.json").read_text(encoding="utf-8"))
+        mirror = config["mirror_markers"]["mirror"]
+        self.assertEqual((mirror["width_mm"], mirror["height_mm"]), (430.0, 300.0))
+        source = (ROOT / "scripts" / "blender" / "100_marks.py").read_text(encoding="utf-8")
+        self.assertIn('"width_mm": 430.0', source)
+        self.assertIn('"height_mm": 300.0', source)
+        self.assertIn('"shape": MARK_SHAPE_HALF_ELLIPSE', source)
+
+    def test_half_ellipse_inside_test(self):
+        source = (ROOT / "scripts" / "blender" / "100_marks.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        names = {"MARK_SHAPE_RECT", "MARK_SHAPE_HALF_ELLIPSE", "mark_inside"}
+        nodes = [
+            node for node in tree.body
+            if getattr(node, "name", None) in names
+            or (isinstance(node, ast.Assign) and getattr(node.targets[0], "id", None) in names)
+        ]
+        namespace = {}
+        exec(compile(ast.Module(nodes, []), "100_marks.py", "exec"), namespace)
+        inside = namespace["mark_inside"]
+        half = namespace["MARK_SHAPE_HALF_ELLIPSE"]
+        self.assertTrue(inside(0.0, -0.99, half))   # just above the straight edge
+        self.assertTrue(inside(0.0, 0.99, half))    # just below the apex
+        self.assertFalse(inside(0.0, -1.01, half))  # below the straight edge
+        self.assertFalse(inside(0.9, 0.9, half))    # outside the curve
+        self.assertTrue(inside(0.9, 0.9, namespace["MARK_SHAPE_RECT"]))
+
     def test_standalone_has_no_project_dependency(self):
-        source = (ROOT / "scripts" / "blender" / "100_mirror_marks.py").read_text(
+        source = (ROOT / "scripts" / "blender" / "100_marks.py").read_text(
             encoding="utf-8"
         )
         self.assertNotIn("project_config", source)
         self.assertNotIn("simulation.json", source)
         self.assertIn("apply_mirror_markers", source)
+        self.assertIn("apply_marks", source)
         self.assertIn("invoke_props_dialog", source)
-        self.assertIn("launch_marker_dialog", source)
+        self.assertIn("launch_marks_dialog", source)
 
     def test_marks_do_not_add_physics_or_geometry_modifiers(self):
-        source = (ROOT / "scripts" / "blender" / "100_mirror_marks.py").read_text(
+        source = (ROOT / "scripts" / "blender" / "100_marks.py").read_text(
             encoding="utf-8"
         )
         self.assertNotIn("modifiers.new", source)
@@ -41,9 +71,7 @@ class SharedMarkBlockTests(unittest.TestCase):
     """Numbered standalone scripts keep the embedded overlay block in sync."""
 
     FILENAMES = (
-        "100_mirror_marks.py",
-        "101_door_marks.py",
-        "102_plate_marks.py",
+        "100_marks.py",
         "003_cloth_setup.py",
     )
 

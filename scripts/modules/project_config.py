@@ -25,7 +25,7 @@ BLENDER_SCRIPTS = PROJECT_ROOT / "scripts" / "blender"
 def load_blender_script(filename: str) -> ModuleType:
     """Load ``scripts/blender/<filename>`` as a fresh module.
 
-    Numbered script names such as ``100_mirror_marks.py`` are not valid import
+    Numbered script names such as ``100_marks.py`` are not valid import
     names. Loading anew on every call also keeps Blender from reusing a stale
     module after the file is edited between Text Editor runs. The script's
     ``if __name__ == "__main__"`` block does not run.

@@ -67,8 +67,8 @@ blender --background --factory-startup --python-exit-code 1 --python tests/blend
   `002_sew_from_svg.py` 按语义 Sewing ID 生成 Loose Edge →
   `003_cloth_setup.py`（或配置版 `config_driven/003_cloth_setup.py`，应用
   `Oxford_210D_SmoothDrape_V2`）。
-- 标记：`100_mirror_marks.py` 耳位/充电口、`101_door_marks.py` 车门线、
-  `102_plate_marks.py` 车牌开口。
+- 标记：`100_marks.py` 一个窗口设置耳位（半椭圆）、充电口、车门线、车牌开口，
+  每项可单独开关。
 - 碰撞体：`200_collision_exterior.py` 生成外包络 Collision。
 - 导出：`300_export_three_views.py`、`301_export_six_views.py`。
 
@@ -105,115 +105,65 @@ S001_LEFT_B
 
 同一 Sewing ID 必须恰好对应两个 Panel。`A`、`B` 标记用于强制 `A → A`、`B → B`，不再用空间距离猜测缝合方向。旧工程的 `SEAM_TOP_LEFT` 命名暂由 `simulation.json` 中的显式配对兼容。
 
-## 耳位与充电口标记
+## 车罩标记（100_marks.py）
 
-### 当前标记代表什么
+### 标记内容
 
-`100_mirror_marks.py` 不生成真实的后视镜耳袋或充电口结构，也不修改
-Cloth 物理。它在已经落到车辆上的车罩三角面中查找版型坐标附近的面，给这些
-完整三角面分配高对比材质：
+`100_marks.py` 合并了原 `100_mirror_marks.py`、`101_door_marks.py`、
+`102_plate_marks.py`。运行后弹出一个“车罩标记”窗口，四类标记各有开关；
+关闭的标记会在确定时被移除，其余标记重新生成：
 
-- 橙红色：左右后视镜耳位中心；
-- 蓝色：左侧充电口中心；
-- 标记不增加顶点、面、质量、碰撞、缝线或约束。
+| 标记 | 形状 | 默认值 |
+| --- | --- | --- |
+| 后视镜耳位（左右各一） | 半椭圆，直边在下 | 外接矩形中心距车头 1600 mm、距底部 1020 mm；宽 430 mm（直边长）、高 300 mm（直边到顶点） |
+| 充电口（单侧） | 矩形 | 中心距车尾 340 mm、距底部 820 mm；180 × 160 mm |
+| 车门线（左右） | 竖线 | 距车头 1800 mm，线宽 30 mm |
+| 车牌开孔（`PANEL_TOP`） | 矩形 | 前后端净距 300 mm；440 × 140 mm |
 
-画板 1 的二维坐标按厘米标注，脚本配置统一换算为毫米：
+后视镜耳位下方会生成 Text 对象 `<Cloth 名> Mirror Label L/R`（集合 `CC Mark Labels`），
+内容如 `MIRROR L  X 1600  Y 1020 / W 430 x H 300 mm`，用于记录定位；窗口中耳位
+设置下方也实时显示同样的信息。定位信息同时写入 Cloth 对象的自定义属性
+`cc_mirror_marker_*`，完整窗口参数保存在 `cc_marks_config`，下次打开窗口时
+自动读回。
 
-- 后视镜：以车头底部端点为原点，沿车身向后 `x = 1600 mm`，向上
-  `y = 1020 mm`；左右两侧各一个标记；
-- 充电口：以车尾底部端点为原点，沿车身向前 `x = 340 mm`，向上
-  `y = 820 mm`；只标记车辆左侧。
+标记是叠加在材质上的逐像素形状（面角属性 `cc_mark_<kind>` + 共享 CC mark
+overlay 代码块），边缘精确并随布料变形，Solid 视图（Color = Texture）也可见；
+不增加顶点、面、质量、碰撞、缝线或约束。标签是在当前帧放置的独立物体，
+不随布料变形。Solid 视图中一个面只显示一种标记，标记重叠处以渲染结果为准。
 
 Model X 场景中车辆长度方向是 Blender 的 Y 轴，车头朝 `-Y`，车辆横向是 X
-轴。因此版型的二维 `x` 会映射到 Blender Y，版型的二维 `y` 会映射到
-Blender Z。脚本不是直接把二维数值写入 Blender X/Y。
+轴。版型的二维 `x` 映射到 Blender Y，`y` 映射到 Blender Z。
 
-### 为什么红色是块状、不规则形状
+### 配置版
 
-当前标记采用“面材质”而不是贴图。脚本先在仿真后的评估网格上计算每个三角面
-中心，再用椭圆距离判断该面是否落入标记范围。命中的三角面会整面变色，所以
-标记边界只能沿现有三角形边界形成：
-
-- 50 mm Cloth 网格只能得到近似轮廓，不会是 Illustrator 中光滑的耳朵外形；
-- 三角形大小、方向和疏密不均时，红色会呈锯齿、多边形或不对称块；
-- `width_mm`、`height_mm` 定义的是查找椭圆范围，不是最终生产耳袋轮廓；
-- 开启 Wireframe/编辑网格叠加时，黑色三角边会进一步强化这种碎块视觉；
-- 当前方法用于检查“中心位置是否正确”，不能用于检查耳袋形状或缝份。
-
-旧版脚本在没有基础材质的对象上先把红色材质放入槽位 0，而 Blender 所有面
-默认使用槽位 0，因此曾出现整个车罩变红。新版运行时会先建立/识别基础材质，
-清除旧的耳位与充电口材质分配，再只给目标附近的少量面着色。重新运行新版即可
-清理旧版造成的整罩红色。
-
-### 配置版如何读取参数
-
-项目内运行 [config_driven/100_mirror_marks.py](scripts/blender/config_driven/100_mirror_marks.py) 时，
-读取 `config/simulation.json` 的 `mirror_markers` 段，然后把完整配置传给公共执行
-函数。修改 JSON 后重新运行脚本即可生效：
-
-```json
-"mirror_markers": {
-  "front_axis": "-Y",
-  "mirror": {
-    "distance_from_front_mm": 1600.0,
-    "height_from_bottom_mm": 1020.0,
-    "width_mm": 220.0,
-    "height_mm": 180.0
-  },
-  "charge_port": {
-    "side": "-LATERAL",
-    "distance_from_rear_mm": 340.0,
-    "height_from_bottom_mm": 820.0,
-    "width_mm": 180.0,
-    "height_mm": 160.0
-  },
-  "search_depth_mm": 300.0
-}
-```
-
-参数含义：
-
-- `front_axis`：车辆车头方向，允许 `+X`、`-X`、`+Y`、`-Y`；
-- `distance_from_front_mm`：耳位中心距车头端点的纵向距离；
-- `distance_from_rear_mm`：充电口中心距车尾端点的纵向距离；
-- `height_from_bottom_mm`：中心距车辆包围盒底部的高度；
-- `side`：充电口所在横向侧；Model X 当前使用 `-LATERAL`；
-- `width_mm`、`height_mm`：可视标记的椭圆查找宽高；
-- `search_depth_mm`：允许车罩表面相对车辆侧面的横向距离。
-
-### 独立运行 版如何读取参数
-
-[100_mirror_marks.py](scripts/blender/100_mirror_marks.py)
-不读取 JSON，也不导入项目模块。它使用文件顶部内嵌的 `MARKER_CONFIG` 作为
-交互窗口默认值，方便将整个脚本复制进 `.blend` 的 Text Editor。运行脚本会先
-打开“车罩耳位 / 充电口标记”窗口；可在窗口中修改车头方向、两组中心坐标、
-标记宽高、充电口侧别和搜索深度，按“确定”后才会写入材质标记。修改
-`config/simulation.json` 不会自动改变 独立运行 版的窗口默认值；如需永久调整
-默认值，必须同步修改 独立运行 文件顶部的 `MARKER_CONFIG`。
-
-两个入口最终都调用 `apply_mirror_markers()`：
+[config_driven/100_mirror_marks.py](scripts/blender/config_driven/100_mirror_marks.py)
+读取 `config/simulation.json` 的 `mirror_markers` 段，只更新耳位与充电口，
+不改动车门线和车牌标记：
 
 ```text
 config_driven/100_mirror_marks.py
   -> 读取 config/simulation.json
   -> apply_mirror_markers(config=CONFIG)
 
-100_mirror_marks.py
-  -> 使用内嵌 MARKER_CONFIG 生成交互窗口默认值
-  -> 用户在窗口确认或修改参数
-  -> apply_mirror_markers(config=交互参数)
+100_marks.py
+  -> 使用内嵌 MARKS_CONFIG（或上次保存在 Cloth 上的参数）生成窗口默认值
+  -> apply_marks(config=窗口参数)
 ```
+
+`mirror_markers.mirror` 可选 `flat_edge`（`BOTTOM`/`TOP`）和 `label`
+（是否生成定位标签）。修改 `simulation.json` 不会改变独立版窗口默认值，
+永久默认值在 `100_marks.py` 顶部的 `MARKS_CONFIG`。
 
 ### 正确运行方式
 
 1. 切换到车罩已经完成落车的最终比较帧；
-2. 选择与该车罩对应的车辆或 Collision 对象；
-3. 最后选择 Cloth 对象，使 Cloth 成为活动对象；
-4. 运行配置版或 独立运行 版，两者只运行一个；独立运行 版需在弹窗确认参数；
-5. 使用 Material Preview，或在 Solid 模式把 Color 设置为 Material，查看颜色。
+2. 选择一个或多个 Cloth 对象（可批量：所有选中的 Cloth 使用同一组参数，
+   窗口默认值读自活动对象）；
+3. 运行配置版或独立版；独立版需在弹窗确认参数；
+4. 使用 Material Preview，或在 Solid 模式把 Color 设置为 Texture 查看。
 
-车辆参考选错、当前帧尚未落罩、车头轴配置错误或目标范围附近没有布料面时，
-新版会停止并报错，不再随意选择距离最近的三角面作为标记。
+当前帧尚未落罩、车头轴配置错误或目标范围内没有布料面时，脚本会停止并报错，
+且不会只更新一部分标记；批量时出错的物体保持不变并给出警告，其余物体照常标记。
 
 ## 验证
 

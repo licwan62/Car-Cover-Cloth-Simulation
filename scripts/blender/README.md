@@ -25,9 +25,7 @@ loads one by path when a config-driven wrapper needs its implementation.
 | `001_remesh.py` | Uniform sampling and constrained Delaunay cloth mesh | Embedded settings |
 | `002_sew_from_svg.py` | Build Sewing directly from a semantic SVG | Creates PANEL/SEAM/HEM and automatic A/B vertex groups, then arc-length-matched loose edges |
 | `003_cloth_setup.py` | Apply the self-contained cloth preset | Animated soft pin springs, object/self collision, and seam material |
-| `100_mirror_marks.py` | Mirror-pocket and charge-port position marks | Opens an interactive `MARKER_CONFIG` dialog |
-| `101_door_marks.py` | Vertical door-position line on both sides | Interactive distance from the vehicle front |
-| `102_plate_marks.py` | Plate-opening mockups on `PANEL_TOP` | Material marks only, not cutouts |
+| `100_marks.py` | Mirror-pocket (half ellipse + position label), charge-port, door-line and plate-opening marks | One `MARKS_CONFIG` dialog; each mark can be switched off |
 | `200_collision_exterior.py` | Exterior-only drape collider | Six-direction first-hit envelope, gap closing, cavity/island removal, closed-manifold validation |
 | `300_export_three_views.py` | Real-size three-view SVG/PNG export | Auxiliary reporting tool |
 | `301_export_six_views.py` | Four orthographic and two perspective views | Six PNGs and an embedded SVG atlas |
@@ -35,7 +33,7 @@ loads one by path when a config-driven wrapper needs its implementation.
 | `config_driven/001_remesh.py` | Same meshing stage as `001_remesh.py` | Reads `cloth_mesh` |
 | `config_driven/002_sew_from_groups.py` | Create Sewing Springs from existing seam vertex groups | Semantic ID pairing, A/B direction, legacy pairs from `sewing` |
 | `config_driven/003_cloth_setup.py` | Apply Oxford cloth settings | `config/cloth/oxford_210d.json` (SmoothDrape V2) |
-| `config_driven/100_mirror_marks.py` | Same marks as `100_mirror_marks.py` | Reads `mirror_markers`; no dialog |
+| `config_driven/100_mirror_marks.py` | Mirror and charge-port marks of `100_marks.py` | Reads `mirror_markers`; no dialog |
 | `../modules/project_config.py` | Load project JSON; load numbered scripts | Blender-independent shared module |
 | `../modules/seam_naming.py` | Parse `S001_PANEL[_A\|_B]` names | Blender-independent shared module |
 | `../tools/build_svg_to_cloth.py` | Refresh the payloads embedded in `000_svg_to_cloth.py` | Regular Python, not Blender |
@@ -67,7 +65,7 @@ scripts in `scripts/blender/`; open those in the Text Editor and click
   `--factory-startup`: the scripts fall back to `../../modules` beside their
   real file path.
 - `config_driven/100_mirror_marks.py` calls
-  `project_config.load_blender_script("100_mirror_marks.py")`, which loads a
+  `project_config.load_blender_script("100_marks.py")`, which loads a
   fresh copy on every run so edits are never masked by a stale module.
 
 Blender checks (factory settings; saved preferences and scenes are not changed):
@@ -141,17 +139,24 @@ connected to more than two loose sewing edges. Such a many-to-one hub is a
 topology error that creates the tail "black-hole" effect; increasing Sewing
 force would make it worse rather than correct it.
 
-## 100: Mirror-position comparison marks
+## 100: Comparison marks
 
-Artboard 1 of `illustrator/TESLA-MODELX.ai` places the mirror-pocket center
-1600 mm behind the front-bottom endpoint and 1020 mm above it. The left-side
+`100_marks.py` sets every mark from one dialog (mirror pocket, charge port,
+door line, plate openings) on every selected Cloth mesh; a switched-off mark
+is removed. The mirror pocket
+is a half ellipse, 430 mm along its straight bottom edge and 300 mm high, with
+a `<cloth> Mirror Label L/R` Text object below it recording its position and size.
+
+Artboard 1 of `illustrator/TESLA-MODELX.ai` places the center of the
+rectangle enclosing the mirror-pocket half ellipse 1600 mm behind the front-bottom endpoint and 1020 mm
+above it. The left-side
 charge-port center is 340 mm from the rear-bottom endpoint and 820 mm above it.
 At the settled comparison frame, activate the Cloth mesh and run
 `config_driven/100_mirror_marks.py`. The evaluated `PANEL_LEFT` and
 `PANEL_RIGHT` vertex groups provide separate side-panel coordinate references,
 so `PANEL_TOP` and vehicle Collision bounds cannot shift the marks. The script
 paints small left/right mirror marks orange-red and the left charge-port mark
-blue. It does not create a mirror-pocket mesh or affect Cloth, Collision, mass,
+blue; door and plate marks are left as they are. It does not create a mirror-pocket mesh or affect Cloth, Collision, mass,
 sewing, or Fit geometry. If the vehicle front axis differs from the Model X
 scene's default -Y, change `mirror_markers.front_axis` in
 `config/simulation.json`.

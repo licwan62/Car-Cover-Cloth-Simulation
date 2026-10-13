@@ -1,12 +1,12 @@
-"""Apply a self-contained 30-frame sew and drape car-cover preset.
+"""Apply a self-contained 15-frame sew and drape car-cover preset.
 
 Usage in Blender:
 1. Open the Scripting workspace and create a new Text block.
 2. Paste this entire file into the Text Editor.
 3. Select one or more 50 mm cloth mesh objects in Object Mode.
 4. Clear any old Cloth bake, run Script, confirm the settings dialog (e.g.
-   固定车顶顶点), then simulate frames 1 through 30 (or Scene Start through
-   Scene Start + 29). Errors are reported in Blender's status bar.
+   固定车顶顶点), then simulate frames 1 through 15 (or Scene Start through
+   Scene Start + 14). Errors are reported in Blender's status bar.
 5. Start with non-intersecting panels. Self-collision is active from the start;
    the final stage applies per-vertex animated soft pin spring forces.
    Replay sequentially from Scene Start after clearing the cache; rerun this
@@ -23,23 +23,23 @@ from mathutils import Vector
 
 
 # ============================================================
-# EMBEDDED PRESET: CarCover_Simplified_30F_V30
+# EMBEDDED PRESET: CarCover_Simplified_15F_V31
 # Assumptions:
 # - 1 Blender Unit = 1 metre
 # - Average cloth mesh edge length is approximately 50 mm
 # - Sewing, gravity and collision settle without a post-simulation HEM pass
 # ============================================================
 
-PRESET_NAME = "CarCover_Simplified_30F_V30"
+PRESET_NAME = "CarCover_Simplified_15F_V31"
 MATERIAL_PRESET_NAME = "Car Cover Structured Oxford (uncalibrated)"
 MESH_EDGE_TARGET_MM = 50.0
-SIMULATION_END_OFFSET = 29
+SIMULATION_END_OFFSET = 14
 
-# V30 compresses the former 50-frame V29 schedule into 30 frames. Each frame
-# advances 5/3 as much cloth time with proportionally more substeps, so the
+# V31 compresses the former 50-frame V29 schedule into 15 frames. Each frame
+# advances 10/3 as much cloth time with proportionally more substeps, so the
 # solver step size and total solve time per drape match V29.
-QUALITY_STEPS = 34
-TIME_SCALE = 50.0 / 30.0
+QUALITY_STEPS = 68
+TIME_SCALE = 50.0 / 15.0
 MASS_PER_VERTEX = 0.25
 AIR_DAMPING = 3.0
 
@@ -51,8 +51,8 @@ COMPRESSION_STIFFNESS = 68.0
 SHEAR_STIFFNESS = 65.0
 BENDING_STIFFNESS = 20.0
 BENDING_STIFFNESS_DURING_SEWING = 12.0
-BENDING_RECOVERY_START = 4
-BENDING_RECOVERY_END = 10
+BENDING_RECOVERY_START = 2
+BENDING_RECOVERY_END = 5
 BENDING_MODEL = "ANGULAR"
 
 TENSION_DAMPING = 10.0
@@ -65,18 +65,20 @@ SEWING_FORCE_START = 4.0
 MAX_SEWING_FORCE = 12.0
 SEWING_FORCE_SUSTAIN = 6.0
 SEWING_RAMP_START = 0
-SEWING_RAMP_END = 11
-SEWING_RELEASE_START = 14
-SEWING_RELEASE_END = 20
+SEWING_RAMP_END = 5
+SEWING_RELEASE_START = 7
+SEWING_RELEASE_END = 10
 SEWING_GRAVITY_FACTOR = 0.65
 GRAVITY_RAMP_START = 0
-GRAVITY_RAMP_END = 11
+GRAVITY_RAMP_END = 5
 
 ENABLE_OBJECT_COLLISION = True
 COLLISION_QUALITY = 8
 OBJECT_COLLISION_DISTANCE_MM = 10.0
-OBJECT_COLLISION_FRICTION = 0.2
-COLLIDER_SURFACE_FRICTION = 3.0
+# V31 raises both friction terms so the cover grips the vehicle instead of
+# sliding along it while it settles.
+OBJECT_COLLISION_FRICTION = 5.0
+COLLIDER_SURFACE_FRICTION = 10.0
 COLLISION_PROXY_TAG = "car_cover_generated_collision_proxy"
 
 ENABLE_SELF_COLLISION = True
@@ -87,19 +89,19 @@ SELF_COLLISION_FRICTION = 0.2
 PIN_GROUP_NAME = "PIN_ROOF"
 PIN_STIFFNESS = 0.85
 PIN_VERTEX_WEIGHT = 0.85
-# Master switch for the temporary PIN_ROOF anchor on the TOP panel. False
-# leaves every roof vertex free: no PIN_ROOF group is created and the Cloth
-# pin group/stiffness driver is cleared.
-ENABLE_ROOF_PIN_DURING_SIMULATION = False
+# Master switch for the temporary PIN_ROOF soft anchor on the TOP panel (on by
+# default in V31). False leaves every roof vertex free: no PIN_ROOF group is
+# created and the Cloth pin group/stiffness driver is cleared.
+ENABLE_ROOF_PIN_DURING_SIMULATION = True
 AUTO_CREATE_ROOF_PIN = True
 AUTO_ROOF_PIN_VERTEX_COUNT = 12
-ROOF_PIN_HOLD_END = 11
-ROOF_PIN_RELEASE_END = 17
+ROOF_PIN_HOLD_END = 5
+ROOF_PIN_RELEASE_END = 8
 
 SHADE_SMOOTH = True
 ENABLE_DISPLAY_SUBSURF = True
 
-# Seam preview. As with 100_mirror_marks.py, semantic seam groups are drawn by
+# Seam preview. As with 100_marks.py, semantic seam groups are drawn by
 # the shared CC mark overlay scheme: a straight band of SEAM_MARK_WIDTH_MM on
 # each side of the seam that follows Cloth deformation, also visible in Solid
 # view with Color = Texture. It adds no solve geometry or constraints.
@@ -167,11 +169,11 @@ HEM_DOWN_FALLOFF_POWER = 0.5
 # direction remains vertical, while the small front/rear component aids slide.
 HEM_SLIDE_HORIZONTAL_FACTOR = 0.08
 
-HEM_DRAG_START = 10
-HEM_DRAG_END = 24
-HEM_LEVEL_START = 19
-HEM_LEVEL_END = 26
-HEM_DRAG_SETTLE_END = 29
+HEM_DRAG_START = 5
+HEM_DRAG_END = 12
+HEM_LEVEL_START = 9
+HEM_LEVEL_END = 13
+HEM_DRAG_SETTLE_END = 14
 HEM_EQUAL_HEIGHT_TOLERANCE_MM = 20.0
 ENABLE_HEM_HEIGHT_FEEDBACK = False
 HEM_HEIGHT_FEEDBACK_GAIN = 0.5
@@ -216,20 +218,20 @@ EXPANSION_MAX_DISTANCE_MM = 1600.0
 EXPANSION_FALLOFF_POWER = 1.0
 
 # Stage offsets are relative to Scene Start.
-EXPANSION_RAMP_START = 17
-EXPANSION_RAMP_END = 23
-EXPANSION_HOLD_END = 26
-EXPANSION_SUSTAIN_START = 28
-EXPANSION_RELEASE_START = 28
-EXPANSION_RELEASE_END = 29
+EXPANSION_RAMP_START = 8
+EXPANSION_RAMP_END = 11
+EXPANSION_HOLD_END = 13
+EXPANSION_SUSTAIN_START = 14
+EXPANSION_RELEASE_START = 14
+EXPANSION_RELEASE_END = 14
 
 # Legacy Wind timing retained only for cleaning up older generated fields.
-REAR_DRAG_START = 10
-REAR_DRAG_RAMP_START = 14
-REAR_DRAG_RAMP_END = 21
-REAR_DRAG_HOLD_END = 24
-REAR_DRAG_RELEASE_END = 28
-REAR_DRAG_SUSTAIN_END = 29
+REAR_DRAG_START = 5
+REAR_DRAG_RAMP_START = 7
+REAR_DRAG_RAMP_END = 10
+REAR_DRAG_HOLD_END = 12
+REAR_DRAG_RELEASE_END = 14
+REAR_DRAG_SUSTAIN_END = 14
 
 # Print one compact line per evaluated frame so the active guide forces can be
 # checked in Blender's System Console while playing or baking the simulation.
@@ -251,7 +253,7 @@ ENABLE_POST_CLOTH_SEAM_WELD = True
 SEAM_WELD_MODIFIER_NAME = "CC Post-Cloth Seam Weld"
 SEAM_WELD_GROUP_NAME = "CC_SEAM_WELD"
 SEAM_WELD_DISTANCE_MM = 6.0
-SEAM_WELD_ENABLE_OFFSET = 21
+SEAM_WELD_ENABLE_OFFSET = 11
 ABORT_ON_SEWING_HUBS = True
 MAX_SEWING_CONNECTORS_PER_VERTEX = 2
 
@@ -341,28 +343,38 @@ def get_or_create_display_subsurf(obj):
 
 
 # >>> CC MARK OVERLAY >>>
-# Shared mark scheme. Keep this block identical in 100_mirror_marks.py,
-# 101_door_marks.py, 102_plate_marks.py and 003_cloth_setup.py so each script
-# still runs on its own from Blender's Text Editor.
+# Shared mark scheme. Keep this block identical in 100_marks.py and
+# 003_cloth_setup.py so each script still runs on its own from Blender's Text
+# Editor.
 #
 # A mark is a FLOAT2 face-corner attribute ``cc_mark_<kind>`` holding each
-# corner's normalized position inside the mark (inside means |u|, |v| < 1) plus
-# a color stored in the object's ``cc_mark_colors`` property. mark_rebuild()
-# derives everything else from those attributes, so any script can rebuild
-# without losing the marks written by another:
-# * faces touching a mark receive a copy of their base material whose Base
-#   Color is overlaid by a per-pixel ``max(|u|, |v|) < 1`` test for every mark,
-#   giving straight edges that follow the Cloth deformation;
+# corner's normalized position inside the mark's box (|u|, |v| < 1) plus a
+# color and a shape stored in the object's ``cc_mark_colors`` and
+# ``cc_mark_shapes`` properties. Shapes:
+# * ``rect`` (default): the whole box, ``max(|u|, |v|) < 1``;
+# * ``half_ellipse``: straight edge on v = -1, apex on v = 1,
+#   ``v > -1 and u^2 + ((v + 1) / 2)^2 < 1``.
+# mark_rebuild() derives everything else from those attributes, so any script
+# can rebuild without losing the marks written by another:
+# * faces touching a mark's box receive a copy of their base material whose
+#   Base Color is overlaid by a per-pixel shape test for every mark, giving
+#   exact edges that follow the Cloth deformation;
 # * Solid view cannot run shader nodes, so each overlay material also holds an
-#   unlinked, active Image Texture (Closest) whose centre 2x2 texels are the
-#   mark color, sampled through the active ``cc_mark_uv`` UV map.
+#   unlinked, active Image Texture (Closest) whose centre texels draw the mark
+#   shape, sampled through the active ``cc_mark_uv`` UV map.
 # No geometry, mass, collision, constraints or modifiers are added.
 MARK_ATTRIBUTE_PREFIX = "cc_mark_"
 MARK_COLORS_PROPERTY = "cc_mark_colors"
+MARK_SHAPES_PROPERTY = "cc_mark_shapes"
+MARK_SHAPE_RECT = "rect"
+MARK_SHAPE_HALF_ELLIPSE = "half_ellipse"
+# Solid-image texels from the centre to the edge of the mark box: a rect needs
+# only 2x2 texels for exact edges, a curve needs more to look smooth.
+MARK_SOLID_HALF_TEXELS = {MARK_SHAPE_RECT: 1, MARK_SHAPE_HALF_ELLIPSE: 16}
 MARK_OVERLAY_BASE_PROPERTY = "cc_marker_base_material"
 MARK_OVERLAY_KIND_PROPERTY = "cc_marker_kind"
 MARK_SOLID_UV_LAYER = "cc_mark_uv"
-MARK_SOLID_TEXTURE_SIZE = 64  # the mark covers the centre 2x2 texels
+MARK_SOLID_TEXTURE_SIZE = 64
 MARK_OUTSIDE = 1.0e3
 MARK_BASE_MATERIAL = "CC Cloth Base"
 MARK_DEFAULT_BASE_COLOR = (0.18, 0.22, 0.28, 1.0)
@@ -383,8 +395,10 @@ MARK_LEGACY_PROPERTIES = (
 )
 
 
-def mark_write(obj, kind, values, color):
-    """Store one mark: flat (u, v) pairs per face corner and its RGBA color."""
+def mark_write(obj, kind, values, color, shape=MARK_SHAPE_RECT):
+    """Store one mark: flat (u, v) pairs per face corner, RGBA color, shape."""
+    if shape not in MARK_SOLID_HALF_TEXELS:
+        raise ValueError(f"未知标记形状：{shape}")
     mesh = obj.data
     name = MARK_ATTRIBUTE_PREFIX + kind
     attribute = mesh.attributes.get(name)
@@ -399,6 +413,9 @@ def mark_write(obj, kind, values, color):
     colors = _mark_colors(obj)
     colors[kind] = [float(value) for value in color]
     obj[MARK_COLORS_PROPERTY] = colors
+    shapes = _mark_shapes(obj)
+    shapes[kind] = shape
+    obj[MARK_SHAPES_PROPERTY] = shapes
 
 
 def mark_remove(obj, kind):
@@ -408,13 +425,23 @@ def mark_remove(obj, kind):
     colors = _mark_colors(obj)
     if colors.pop(kind, None) is not None:
         obj[MARK_COLORS_PROPERTY] = colors
+    shapes = _mark_shapes(obj)
+    if shapes.pop(kind, None) is not None:
+        obj[MARK_SHAPES_PROPERTY] = shapes
 
 
 def mark_touches(values, loop_indices):
-    """True when the corner coordinates' bounding box meets the mark."""
+    """True when the corner coordinates' bounding box meets the mark box."""
     us = [values[index * 2] for index in loop_indices]
     vs = [values[index * 2 + 1] for index in loop_indices]
     return min(us) <= 1.0 and max(us) >= -1.0 and min(vs) <= 1.0 and max(vs) >= -1.0
+
+
+def mark_inside(u, v, shape):
+    """Python twin of the shader test for one normalized point."""
+    if shape == MARK_SHAPE_HALF_ELLIPSE:
+        return v > -1.0 and u * u + ((v + 1.0) * 0.5) ** 2 < 1.0
+    return max(abs(u), abs(v)) < 1.0
 
 
 def mark_rebuild(obj):
@@ -424,6 +451,7 @@ def mark_rebuild(obj):
     """
     mesh = obj.data
     kinds = _mark_kinds(obj)
+    shapes = _mark_shapes(obj)
     overlay_slots = {
         index for index, material in enumerate(mesh.materials)
         if material is not None and (
@@ -468,13 +496,13 @@ def mark_rebuild(obj):
         values = coordinates[kind]
         for index in loop_indices:
             solid_uv[index * 2:index * 2 + 2] = _mark_solid_uv(
-                values[index * 2], values[index * 2 + 1]
+                values[index * 2], values[index * 2 + 1], _mark_shape(shapes, kind)
             )
         key = (polygon.material_index, kind)
         if key not in overlays:
             base = mesh.materials[key[0]] if key[0] < len(mesh.materials) else None
             overlays[key] = _mark_material_slot(
-                obj, _mark_overlay_material(base, kinds, kind)
+                obj, _mark_overlay_material(obj, base, kinds, shapes, kind)
             )
         polygon.material_index = overlays[key]
         marked[polygon.index] = kind
@@ -550,6 +578,18 @@ def _mark_colors(obj):
     return {str(kind): [float(value) for value in color] for kind, color in stored.items()}
 
 
+def _mark_shapes(obj):
+    stored = obj.get(MARK_SHAPES_PROPERTY)
+    if not hasattr(stored, "items"):
+        return {}
+    return {str(kind): str(shape) for kind, shape in stored.items()}
+
+
+def _mark_shape(shapes, kind):
+    shape = shapes.get(kind, MARK_SHAPE_RECT)
+    return shape if shape in MARK_SOLID_HALF_TEXELS else MARK_SHAPE_RECT
+
+
 def _mark_kinds(obj):
     kinds = {}
     for kind, color in sorted(_mark_colors(obj).items()):
@@ -595,8 +635,20 @@ def _mark_principled(material):
     )
 
 
-def _mark_mask_factor(nodes, links, attribute_name, x, y):
-    """Return a socket that is 1 inside the normalized mark, else 0."""
+def _mark_math(nodes, links, operation, inputs, location):
+    node = nodes.new("ShaderNodeMath")
+    node.operation = operation
+    node.location = location
+    for index, value in enumerate(inputs):
+        if isinstance(value, (int, float)):
+            node.inputs[index].default_value = value
+        else:
+            links.new(value, node.inputs[index])
+    return node.outputs[0]
+
+
+def _mark_mask_factor(nodes, links, attribute_name, shape, x, y):
+    """Return a socket that is 1 inside the normalized mark shape, else 0."""
     attribute = nodes.new("ShaderNodeAttribute")
     attribute.attribute_type = "GEOMETRY"
     attribute.attribute_name = attribute_name
@@ -604,29 +656,26 @@ def _mark_mask_factor(nodes, links, attribute_name, x, y):
     separate = nodes.new("ShaderNodeSeparateXYZ")
     separate.location = (x + 180, y)
     links.new(attribute.outputs["Vector"], separate.inputs[0])
-    components = []
-    for offset, name in enumerate(("X", "Y")):
-        absolute = nodes.new("ShaderNodeMath")
-        absolute.operation = "ABSOLUTE"
-        absolute.location = (x + 360, y - offset * 160)
-        links.new(separate.outputs[name], absolute.inputs[0])
-        components.append(absolute.outputs[0])
-    largest = nodes.new("ShaderNodeMath")
-    largest.operation = "MAXIMUM"
-    largest.location = (x + 540, y)
-    links.new(components[0], largest.inputs[0])
-    links.new(components[1], largest.inputs[1])
-    inside = nodes.new("ShaderNodeMath")
-    inside.operation = "LESS_THAN"
-    inside.inputs[1].default_value = 1.0
-    inside.location = (x + 720, y)
-    links.new(largest.outputs[0], inside.inputs[0])
-    return inside.outputs[0]
+    u, v = separate.outputs["X"], separate.outputs["Y"]
+    if shape == MARK_SHAPE_HALF_ELLIPSE:
+        rise = _mark_math(nodes, links, "MULTIPLY_ADD", (v, 0.5, 0.5), (x + 360, y - 160))
+        u_squared = _mark_math(nodes, links, "MULTIPLY", (u, u), (x + 360, y))
+        rise_squared = _mark_math(nodes, links, "MULTIPLY", (rise, rise), (x + 540, y - 160))
+        radius = _mark_math(nodes, links, "ADD", (u_squared, rise_squared), (x + 540, y))
+        within = _mark_math(nodes, links, "LESS_THAN", (radius, 1.0), (x + 720, y))
+        above = _mark_math(nodes, links, "GREATER_THAN", (v, -1.0), (x + 720, y - 160))
+        return _mark_math(nodes, links, "MULTIPLY", (within, above), (x + 900, y))
+    absolute_u = _mark_math(nodes, links, "ABSOLUTE", (u,), (x + 360, y))
+    absolute_v = _mark_math(nodes, links, "ABSOLUTE", (v,), (x + 360, y - 160))
+    largest = _mark_math(nodes, links, "MAXIMUM", (absolute_u, absolute_v), (x + 540, y))
+    return _mark_math(nodes, links, "LESS_THAN", (largest, 1.0), (x + 720, y))
 
 
-def _mark_solid_image(name, base_color, mark_color):
-    """Image whose centre 2x2 texels are the mark, sampled with Closest."""
+def _mark_solid_image(name, base_color, mark_color, shape):
+    """Image whose centre texels draw the mark shape, sampled with Closest."""
     size = MARK_SOLID_TEXTURE_SIZE
+    half = MARK_SOLID_HALF_TEXELS[shape]
+    centre = size // 2
     # Always start fresh: re-packing an already packed image after editing its
     # pixels can store stale data.
     previous = bpy.data.images.get(name)
@@ -635,26 +684,32 @@ def _mark_solid_image(name, base_color, mark_color):
     image = bpy.data.images.new(name, size, size, alpha=False, float_buffer=True)
     pixels = [float(base_color[0]), float(base_color[1]), float(base_color[2]), 1.0] * (size * size)
     mark = [float(mark_color[0]), float(mark_color[1]), float(mark_color[2]), 1.0]
-    for y in (size // 2 - 1, size // 2):
-        for x in (size // 2 - 1, size // 2):
-            start = (y * size + x) * 4
-            pixels[start:start + 4] = mark
+    for y in range(centre - half, centre + half):
+        for x in range(centre - half, centre + half):
+            if mark_inside((x + 0.5 - centre) / half, (y + 0.5 - centre) / half, shape):
+                start = (y * size + x) * 4
+                pixels[start:start + 4] = mark
     image.pixels.foreach_set(pixels)
     image.pack()  # generated images are otherwise lost when the .blend is saved
     return image
 
 
-def _mark_solid_uv(u, v):
+def _mark_solid_uv(u, v, shape):
     # Maps |u|, |v| <= 1 exactly onto the centre texels of the Solid image.
-    size = float(MARK_SOLID_TEXTURE_SIZE)
-    return 0.5 + u / size, 0.5 + v / size
+    scale = MARK_SOLID_HALF_TEXELS[shape] / float(MARK_SOLID_TEXTURE_SIZE)
+    return 0.5 + u * scale, 0.5 + v * scale
 
 
-def _mark_overlay_material(base, kinds, kind):
-    """Copy ``base`` and overlay every mark mask on its Base Color."""
+def _mark_overlay_material(obj, base, kinds, shapes, kind):
+    """Copy ``base`` and overlay every mark mask on its Base Color.
+
+    The name carries the object: objects sharing a base material can hold
+    different marks, and a shared overlay would be replaced by the last
+    rebuild.
+    """
     base_name = base.name if base is not None else ""
     label = kind.replace("_", " ").title()
-    name = f"{base_name or MARK_BASE_MATERIAL} + CC {label} Mark"
+    name = f"{base_name or MARK_BASE_MATERIAL} + CC {label} Mark ({obj.name})"
     if _mark_principled(base) is not None:
         material = base.copy()
     else:
@@ -677,10 +732,13 @@ def _mark_overlay_material(base, kinds, kind):
         rgb.location = (principled.location.x - 400, principled.location.y + 400)
         current = rgb.outputs[0]
 
-    x = principled.location.x - 1400
+    x = principled.location.x - 1600
     for row, (mask_kind, mask_color) in enumerate(kinds.items()):
         y = principled.location.y + 200 - row * 400
-        factor = _mark_mask_factor(nodes, links, MARK_ATTRIBUTE_PREFIX + mask_kind, x, y)
+        factor = _mark_mask_factor(
+            nodes, links, MARK_ATTRIBUTE_PREFIX + mask_kind,
+            _mark_shape(shapes, mask_kind), x, y,
+        )
         mix = nodes.new("ShaderNodeMix")
         mix.data_type = "RGBA"
         mix.location = (principled.location.x - 220, principled.location.y + 200 - row * 220)
@@ -697,7 +755,7 @@ def _mark_overlay_material(base, kinds, kind):
     # Solid-view preview only: left unlinked so EEVEE/Cycles ignore it.
     preview = nodes.new("ShaderNodeTexImage")
     preview.name = preview.label = "CC Solid View Mark"
-    preview.image = _mark_solid_image(name, solid_base, kinds[kind])
+    preview.image = _mark_solid_image(name, solid_base, kinds[kind], _mark_shape(shapes, kind))
     preview.interpolation = "Closest"
     preview.extension = "EXTEND"
     preview.location = (principled.location.x - 700, principled.location.y + 700)
@@ -3131,9 +3189,9 @@ def apply_preset(obj, measured_difference_mm=None):
 
 
 
-# Optional late-stage HEM leveling is deliberately off in the 30-frame preset:
+# Optional late-stage HEM leveling is deliberately off in the 15-frame preset:
 # it requires a complete trajectory resample and per-frame shape keys.  Keep
-# the cleanup-capable implementation below so rerunning V30 removes V28 data.
+# the cleanup-capable implementation below so rerunning V31 removes V28 data.
 ENABLE_HEM_LEVEL_FEEDBACK = False
 HEM_FEEDBACK_START = 0
 HEM_FEEDBACK_RAMP = 0
@@ -3410,7 +3468,7 @@ def main():
         )
 
     print("")
-    print("V30: 30-frame simplified sew/drape; late HEM trajectory sampling is disabled.")
+    print("V31: 15-frame simplified sew/drape; late HEM trajectory sampling is disabled.")
     print("Clear Cloth cache and replay sequentially from Scene Start. Rerun after geometry changes.")
 
 
