@@ -171,6 +171,18 @@ def assign_panel_ids_by_y(root):
 def _assign_panel_ids_by_y(root, use_existing):
     candidates = []
 
+    # Semantic sewing SVGs can contain auxiliary artwork (labels, guides,
+    # dimensions) alongside a dedicated PANEL layer.  Restrict geometric
+    # discovery to that layer when it is present; outlined text commonly uses
+    # compound paths and must not be mistaken for panel geometry.
+    panel_layers = [
+        element for element in root.iter()
+        if element.tag.rsplit("}", 1)[-1] == "g" and element.get("id") == "PANEL"
+    ]
+    if len(panel_layers) > 1:
+        raise ValueError("Expected at most one PANEL layer")
+    search_root = panel_layers[0] if panel_layers else root
+
     def visit(element):
         kind = element.tag.rsplit("}", 1)[-1]
         named = use_existing and element.get("id", "").startswith("PANEL_")
@@ -185,7 +197,7 @@ def _assign_panel_ids_by_y(root, use_existing):
         for child in element:
             visit(child)
 
-    visit(root)
+    visit(search_root)
     if len(candidates) != 3:
         raise ValueError(
             "Vertical semantic assignment requires exactly three path/rect "

@@ -120,9 +120,12 @@ S001_LEFT_B
 | 车门线（左右） | 竖线 | 距车头 1800 mm，线宽 30 mm |
 | 车牌开孔（`PANEL_TOP`） | 矩形 | 前后端净距 300 mm；440 × 140 mm |
 
-后视镜耳位下方会生成 Text 对象 `<Cloth 名> Mirror Label L/R`（集合 `CC Mark Labels`），
-内容如 `MIRROR L  X 1600  Y 1020 / W 430 x H 300 mm`，用于记录定位；窗口中耳位
-设置下方也实时显示同样的信息。定位信息同时写入 Cloth 对象的自定义属性
+后视镜耳位下方会生成 Text 对象 `<Cloth 名> Mirror Label L/R`（集合 `CC Mark Labels`；
+每个场景各用一个，名称已被其他场景占用时改为 `CC Mark Labels (<场景名>)`，
+旧版本跨场景共用的集合会在运行时拆开），
+内容为全部标记参数，如 `MIRROR L  X 1600  Y 1020 / W 430 x H 300 mm  FLAT BOTTOM /
+CHARGE PANEL_LEFT  REAR X 340  Y 820 / … / DOOR … / PLATES … / FRONT AXIS -Y`；
+窗口中耳位设置下方也实时显示同样的信息。定位信息同时写入 Cloth 对象的自定义属性
 `cc_mirror_marker_*`，完整窗口参数保存在 `cc_marks_config`，下次打开窗口时
 自动读回。
 
@@ -151,7 +154,8 @@ config_driven/100_mirror_marks.py
 ```
 
 `mirror_markers.mirror` 可选 `flat_edge`（`BOTTOM`/`TOP`）和 `label`
-（是否生成定位标签）。修改 `simulation.json` 不会改变独立版窗口默认值，
+（是否生成定位标签；标签列出该 Cloth 上全部标记参数：后视镜、充电口、
+车门线、车牌开孔与车头方向，关闭的标记显示 OFF）。修改 `simulation.json` 不会改变独立版窗口默认值，
 永久默认值在 `100_marks.py` 顶部的 `MARKS_CONFIG`。
 
 ### 正确运行方式

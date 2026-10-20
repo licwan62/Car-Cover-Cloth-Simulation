@@ -4,7 +4,7 @@ Replaces the former 100_mirror_marks.py, 101_door_marks.py and
 102_plate_marks.py. Every mark can be switched on or off in the dialog:
 
 * mirror: half-ellipse mirror pocket on PANEL_LEFT and PANEL_RIGHT, with a
-  text label below each one recording its position and size;
+  text label below each one recording every mark setting on the cloth;
 * charge_port: rectangle on one side panel;
 * door: vertical line on both side panels;
 * plates: front/rear plate-opening rectangles on PANEL_TOP.
@@ -86,7 +86,8 @@ RECORD_PREFIXES = {
     "door": "cc_door_marker",
     "plates": "cc_plates_",
 }
-LABEL_COLLECTION = "CC Mark Labels"
+LABEL_COLLECTION = "CC Mark Labels"  # one per scene, see _label_collection()
+LABEL_COLLECTION_PROPERTY = "cc_mark_label_collection"
 LABEL_MATERIAL = "CC Mirror Label"
 LABEL_OWNER_PROPERTY = "cc_mark_label_owner"
 LABEL_SURFACE_OFFSET = 0.01  # m outside the settled cloth surface
@@ -830,13 +831,62 @@ MARK_BUILDERS = {
 
 
 def mirror_label_text(mirror, side=""):
-    """Positioning record shown below each mirror mark and in the dialog."""
+    """Mirror positioning record (the first lines of marks_label_text)."""
     name = f"MIRROR {side}".rstrip()
     return (
         f"{name}  X {float(mirror['distance_from_front_mm']):g}  "
         f"Y {float(mirror['height_from_bottom_mm']):g}\n"
-        f"W {float(mirror['width_mm']):g} x H {float(mirror['height_mm']):g} mm"
+        f"W {float(mirror['width_mm']):g} x H {float(mirror['height_mm']):g} mm  "
+        f"FLAT {str(mirror.get('flat_edge', 'BOTTOM')).upper()}"
     )
+
+
+def marks_label_text(config, side=""):
+    """Every mark setting, shown below each mirror mark and in the dialog.
+
+    Sections missing from ``config`` are left out; switched-off ones read OFF.
+    ASCII only: Blender's built-in font has no CJK glyphs.
+    """
+    def mm(section, key):
+        return f"{float(section[key]):g}"
+
+    lines = [mirror_label_text(config["mirror"], side)]
+    charge = config.get("charge_port")
+    if charge is not None:
+        if charge.get("enabled", True):
+            lines.append(
+                f"CHARGE {str(charge['side']).upper()}  REAR X {mm(charge, 'distance_from_rear_mm')}  "
+                f"Y {mm(charge, 'height_from_bottom_mm')}\n"
+                f"W {mm(charge, 'width_mm')} x H {mm(charge, 'height_mm')} mm"
+            )
+        else:
+            lines.append("CHARGE OFF")
+    door = config.get("door")
+    if door is not None:
+        if door.get("enabled", True):
+            lines.append(
+                f"DOOR  X {mm(door, 'distance_from_front_mm')}  LINE {mm(door, 'line_width_mm')} mm"
+            )
+        else:
+            lines.append("DOOR OFF")
+    plates = config.get("plates")
+    if plates is not None:
+        if not plates.get("enabled", True):
+            lines.append("PLATES OFF")
+        elif plates.get("front_only", False):
+            lines.append(f"PLATES  FRONT {mm(plates, 'front_distance_mm')}  (FRONT ONLY)")
+        else:
+            lines.append(
+                f"PLATES  FRONT {mm(plates, 'front_distance_mm')}  "
+                f"REAR {mm(plates, 'rear_distance_mm')}"
+            )
+        if plates.get("enabled", True):
+            lines.append(
+                f"L {mm(plates, 'length_mm')} x W {mm(plates, 'width_mm')} mm  "
+                f"{plates.get('color_hex', '')}".rstrip()
+            )
+    lines.append(f"FRONT AXIS {config.get('front_axis', MARKS_CONFIG['front_axis'])}")
+    return "\n".join(lines)
 
 
 def _remove_labels(cloth):
@@ -848,13 +898,71 @@ def _remove_labels(cloth):
                 bpy.data.curves.remove(curve)
 
 
-def _label_collection():
-    collection = bpy.data.collections.get(LABEL_COLLECTION)
+def _scenes_using(collection):
+    return [
+        scene for scene in bpy.data.scenes
+        if collection in scene.collection.children_recursive
+    ]
+
+
+def _is_label_collection(collection):
+    # Untagged "CC Mark Labels[.001]" collections come from earlier versions
+    # (the suffix from a Full Copy of the scene).
+    return bool(collection.get(LABEL_COLLECTION_PROPERTY)) or re.fullmatch(
+        re.escape(LABEL_COLLECTION) + r"(\.\d{3,})?", collection.name
+    ) is not None
+
+
+def _new_label_collection(scene):
+    """A fresh label collection linked to ``scene`` only.
+
+    The plain name goes to the first scene; a later scene finding it taken
+    gets a name carrying the scene, so no two scenes share one collection.
+    """
+    name = LABEL_COLLECTION
+    if bpy.data.collections.get(name) is not None:
+        name = f"{LABEL_COLLECTION} ({scene.name})"
+    collection = bpy.data.collections.new(name)
+    collection[LABEL_COLLECTION_PROPERTY] = True
+    scene.collection.children.link(collection)
+    return collection
+
+
+def _label_collection(scene=None):
+    """The current scene's own label collection, never shared with another.
+
+    Earlier versions looked the collection up by name across the file and
+    linked it into every scene that ran the script. A collection found shared
+    is unlinked from this scene, and this scene's labels move to a new one.
+    """
+    scene = scene or bpy.context.scene
+    root = scene.collection
+    found = [item for item in root.children_recursive if _is_label_collection(item)]
+    collection = next((item for item in found if _scenes_using(item) == [scene]), None)
     if collection is None:
-        collection = bpy.data.collections.new(LABEL_COLLECTION)
-    scene_root = bpy.context.scene.collection
-    if collection not in scene_root.children_recursive:
-        scene_root.children.link(collection)
+        collection = _new_label_collection(scene)
+    collection[LABEL_COLLECTION_PROPERTY] = True
+
+    for shared in found:
+        others = [other for other in _scenes_using(shared) if other != scene]
+        if shared == collection or not others:
+            continue
+        for label in list(shared.objects):
+            owner = bpy.data.objects.get(label.get(LABEL_OWNER_PROPERTY, ""))
+            if owner is None or scene not in owner.users_scene:
+                continue
+            if label.name not in collection.objects:
+                collection.objects.link(label)
+            # A cloth also present in another scene keeps its label there.
+            if not any(other in owner.users_scene for other in others):
+                shared.objects.unlink(label)
+        # Unlink only from parents this scene owns; a parent shared with
+        # another scene would take the collection away from that scene too.
+        for parent in [root, *root.children_recursive]:
+            if shared.name in parent.children and (
+                parent == root or _scenes_using(parent) == [scene]
+            ):
+                parent.children.unlink(shared)
     return collection
 
 
@@ -868,9 +976,13 @@ def _label_material(color):
     return material
 
 
-def _add_mirror_labels(cloth, world, panels, config, targets):
-    """Text below each mirror mark, facing outward from its side panel."""
+def _add_mirror_labels(cloth, world, panels, config, targets, label_config):
+    """Text below each mirror mark, facing outward from its side panel.
+
+    ``label_config`` is every setting stored on the cloth (marks_label_text).
+    """
     mirror = config["mirror"]
+    text_lines = marks_label_text(label_config).count("\n") + 1
     _, longitudinal = _front_axis(config)
     lateral = 1 - longitudinal
     size = max(float(mirror.get("label_size_mm", 40.0)) / 1000.0, 1.0e-3)
@@ -893,7 +1005,7 @@ def _add_mirror_labels(cloth, world, panels, config, targets):
             sign * world[index][lateral]
             for index in panels[panel_name]["vertices"]
             if abs(world[index][longitudinal] - target[longitudinal]) <= half_width
-            and top - size * 3.0 <= world[index].z <= mark_bottom
+            and top - size * (text_lines + 1.0) <= world[index].z <= mark_bottom
         ] or [sign * world[index][lateral] for index in panels[panel_name]["vertices"]]
         location = target.copy()
         location.z = top
@@ -909,7 +1021,7 @@ def _add_mirror_labels(cloth, world, panels, config, targets):
         side = "L" if panel_name == "PANEL_LEFT" else "R"
         name = f"{cloth.name} Mirror Label {side}"
         curve = bpy.data.curves.new(name, type="FONT")
-        curve.body = mirror_label_text(mirror, side)
+        curve.body = marks_label_text(label_config, side)
         curve.size = size
         curve.align_x = "CENTER"
         curve.align_y = "TOP"
@@ -996,10 +1108,6 @@ def apply_marks(cloth=None, config=None, kinds=MARK_KINDS):
             mark_remove(cloth, kind)
     mark_rebuild(cloth)
 
-    if "mirror" in kinds:
-        _remove_labels(cloth)
-        if "mirror" in results and config["mirror"].get("label", True):
-            _add_mirror_labels(cloth, world, panels, config, results["mirror"]["targets"])
     for kind in kinds:
         _clear_records(cloth, kind)
         if kind in results:
@@ -1009,6 +1117,17 @@ def apply_marks(cloth=None, config=None, kinds=MARK_KINDS):
     for kind in kinds:
         stored[kind] = config[kind]
     cloth[CONFIG_PROPERTY] = json.dumps(stored, ensure_ascii=False)
+
+    if "mirror" in kinds:
+        _remove_labels(cloth)
+        if "mirror" in results and config["mirror"].get("label", True):
+            # Marks outside ``kinds`` show their stored settings; marks never
+            # applied to this cloth are left off the label.
+            merged = _merged_config(stored)
+            label_config = {key: merged[key] for key in stored if key in merged}
+            _add_mirror_labels(
+                cloth, world, panels, config, results["mirror"]["targets"], label_config
+            )
 
     counts = {kind: len(result["faces"]) for kind, result in results.items()}
     disabled = [kind for kind in kinds if kind not in results]
@@ -1175,8 +1294,7 @@ class CC_OT_setup_marks(bpy.types.Operator):
         sub = row.row(align=True)
         sub.active = wm.cc_marks_mirror_label
         prop(sub, "mirror_label_size_mm")
-        info = _settings_to_config(wm)["mirror"]
-        for line in mirror_label_text(info).splitlines():
+        for line in marks_label_text(_settings_to_config(wm)).splitlines():
             mirror.label(text=line, icon="INFO")
 
         charge = section("charge_enabled")

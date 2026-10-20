@@ -186,6 +186,27 @@ class SewingSVGTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "exactly three"):
                 svg.convert_tree(root)
 
+    def test_panel_layer_excludes_auxiliary_compound_paths_from_recognition(self):
+        root = ET.fromstring("""
+            <svg xmlns="http://www.w3.org/2000/svg">
+              <g id="lineS">
+                <path d="M0 0H1V1Z M2 2H3V3Z"/>
+              </g>
+              <g id="PANEL">
+                <path d="M0 0H100L90 20H10Z"/>
+                <path d="M0 40V50H100V40Z"/>
+                <path id="PANEL_TOP" d="M0 70H100L90 90H10Z"/>
+              </g>
+            </svg>
+        """)
+
+        svg.assign_panel_ids_by_y(root)
+
+        self.assertEqual(
+            [element.get("id") for element in root[1]],
+            ["PANEL_LEFT", "PANEL_TOP", "PANEL_RIGHT"],
+        )
+
     def test_smooth_curve_reflects_control_and_roundtrips(self):
         segments = svg.parse_path("M0 0 C1 0 2 1 3 1 s2 1 3 0 L0 0Z")
         self.assertEqual(segments[1], ((3., 1.), (6., 1.), ((4., 1.), (5., 2.))))
