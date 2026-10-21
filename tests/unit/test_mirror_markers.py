@@ -72,6 +72,7 @@ class SharedMarkBlockTests(unittest.TestCase):
 
     FILENAMES = (
         "100_marks.py",
+        "101_reflective_strips.py",
         "003_cloth_setup.py",
     )
 

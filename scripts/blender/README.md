@@ -26,6 +26,7 @@ loads one by path when a config-driven wrapper needs its implementation.
 | `002_sew_from_svg.py` | Build Sewing directly from a semantic SVG | Creates PANEL/SEAM/HEM and automatic A/B vertex groups, then arc-length-matched loose edges |
 | `003_cloth_setup.py` | Apply the self-contained cloth preset | Animated soft pin springs, object/self collision, and seam material |
 | `100_marks.py` | Mirror-pocket (half ellipse + position label), charge-port, door-line and plate-opening marks | One `MARKS_CONFIG` dialog; each mark can be switched off |
+| `101_reflective_strips.py` | Reflective-strip rectangle on PANEL_LEFT / PANEL_RIGHT | One `REFLECTIVE_CONFIG` dialog; height measured from the local HEM |
 | `200_collision_exterior.py` | Exterior-only drape collider | Six-direction first-hit envelope, gap closing, cavity/island removal, closed-manifold validation |
 | `300_export_three_views.py` | Real-size three-view SVG/PNG export | Auxiliary reporting tool |
 | `301_export_six_views.py` | Four orthographic and two perspective views | Six PNGs and an embedded SVG atlas |
@@ -160,6 +161,21 @@ blue; door and plate marks are left as they are. It does not create a mirror-poc
 sewing, or Fit geometry. If the vehicle front axis differs from the Model X
 scene's default -Y, change `mirror_markers.front_axis` in
 `config/simulation.json`.
+
+## 101: Reflective strips
+
+`101_reflective_strips.py` draws a 250 x 50 mm reflective-strip rectangle (by
+default) on `PANEL_LEFT`, `PANEL_RIGHT` or both, on every selected Cloth mesh.
+The dialog sets the orientation (HORIZONTAL: long side along the car;
+VERTICAL: upright), the strip center's distance from the front or rear end of
+that side panel, and the center's height above the hem. The hem height is the
+mean settled Z of that panel's `HEM` / `HEM_*` vertices next to the strip, so
+a sloping hem moves the strip with it; a panel without HEM vertices uses its
+lowest point. The strip is the overlay mark kind `reflective`, so it survives
+reruns of `100_marks.py` and `003_cloth_setup.py` (and the reverse). Settings
+are stored in `cc_reflective_config`, positioning records in
+`cc_reflective_marker_*`. A strip that leaves the panel's length, drops below
+the hem or reaches the panel top is rejected.
 
 ## 200: Exterior-only collision envelope
 

@@ -343,9 +343,9 @@ def get_or_create_display_subsurf(obj):
 
 
 # >>> CC MARK OVERLAY >>>
-# Shared mark scheme. Keep this block identical in 100_marks.py and
-# 003_cloth_setup.py so each script still runs on its own from Blender's Text
-# Editor.
+# Shared mark scheme. Keep this block identical in 100_marks.py,
+# 101_reflective_strips.py and 003_cloth_setup.py so each script still runs
+# on its own from Blender's Text Editor.
 #
 # A mark is a FLOAT2 face-corner attribute ``cc_mark_<kind>`` holding each
 # corner's normalized position inside the mark's box (|u|, |v| < 1) plus a
