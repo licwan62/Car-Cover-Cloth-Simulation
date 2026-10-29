@@ -8,7 +8,7 @@ Usage in Blender:
    固定车顶顶点), then simulate frames 1 through 15 (or Scene Start through
    Scene Start + 14). Errors are reported in Blender's status bar.
 5. Start with non-intersecting panels. Self-collision is active from the start;
-   the final stage applies per-vertex animated soft pin spring forces.
+   the final stage shrinks the TOP front/rear hem bands with no hem pins.
    Replay sequentially from Scene Start after clearing the cache; rerun this
    script to resample if the cloth or collision geometry changes.
 
@@ -17,20 +17,22 @@ inside a .blend file is enough to reproduce the preset.
 """
 
 import re
+import heapq
+import math
 
 import bpy
 from mathutils import Vector
 
 
 # ============================================================
-# EMBEDDED PRESET: CarCover_Simplified_15F_V31
+# EMBEDDED PRESET: CarCover_Simplified_15F_V32
 # Assumptions:
 # - 1 Blender Unit = 1 metre
 # - Average cloth mesh edge length is approximately 50 mm
-# - Sewing, gravity and collision settle without a post-simulation HEM pass
+# - Sewing/gravity drape first; TOP end hems shrink during the final stage
 # ============================================================
 
-PRESET_NAME = "CarCover_Simplified_15F_V31"
+PRESET_NAME = "CarCover_Simplified_15F_V32"
 MATERIAL_PRESET_NAME = "Car Cover Structured Oxford (uncalibrated)"
 MESH_EDGE_TARGET_MM = 50.0
 SIMULATION_END_OFFSET = 14
@@ -121,6 +123,17 @@ FABRIC_ROUGHNESS = 0.62
 DISPLAY_SUBSURF_IN_VIEWPORT = False
 DISPLAY_SUBSURF_LEVELS = 1
 DISPLAY_SUBSURF_RENDER_LEVELS = 2
+
+# V32: localized elastic-hem approximation, ramp then hold (frames 11-15).
+ENABLE_HEM_SHRINK = True
+HEM_SHRINK_GROUP_NAME = "CC_HEM_SHRINK"
+HEM_SHRINK_FRONT_GROUP = "HEM_TOP_FRONT"
+HEM_SHRINK_REAR_GROUP = "HEM_TOP_REAR"
+HEM_SHRINK_START_OFFSET = 9
+HEM_SHRINK_END_OFFSET = 12
+HEM_SHRINK_FRONT_FACTOR = 0.20
+HEM_SHRINK_REAR_FACTOR = 0.20
+HEM_SHRINK_BAND_WIDTH_MM = 150.0
 
 # Legacy front/rear fitting guide, disabled in V27 so the hem settles freely.
 # Keep its parameters and cleanup routines to deactivate existing V26 drivers.
@@ -3012,7 +3025,148 @@ def configure_hem_dynamic_drag(obj, modifier, measured_difference_mm=None):
     )
 
 
-def apply_preset(obj, measured_difference_mm=None):
+def hem_band_distances(adjacency, seeds, width):
+    """Bounded surface-edge Dijkstra; adjacency excludes sewing connectors."""
+    distances = {i: 0.0 for i in seeds}
+    queue = [(0.0, i) for i in seeds]
+    heapq.heapify(queue)
+    while queue:
+        distance, i = heapq.heappop(queue)
+        if distance != distances[i]:
+            continue
+        for j, length in adjacency.get(i, ()):
+            candidate = distance + length
+            if candidate < width and candidate < distances.get(j, float("inf")):
+                distances[j] = candidate
+                heapq.heappush(queue, (candidate, j))
+    return distances
+
+
+def hem_band_weight(distance, width):
+    u = max(0.0, min(1.0, distance / width))
+    return 1.0 - u * u * (3.0 - 2.0 * u)
+
+
+def prepare_hem_shrink(obj):
+    """Read-only preflight, run for all selected objects before any mutation."""
+    owned = bool(obj.get("cloth_hem_shrink_owned", False))
+    cloth = next((m for m in obj.modifiers if m.type == "CLOTH"), None)
+    if cloth and cloth.point_cache.is_baked:
+        raise RuntimeError(f"{obj.name}: free the Cloth bake before setup.")
+    if not ENABLE_HEM_SHRINK:
+        return {}
+    if ENABLE_HEM_DRAG or ENABLE_HEM_LEVEL_FEEDBACK:
+        raise RuntimeError("Disable HEM drag/level feedback before HEM shrink.")
+    factors = (HEM_SHRINK_FRONT_FACTOR, HEM_SHRINK_REAR_FACTOR)
+    if any(not math.isfinite(x) or not 0 <= x < 1 for x in factors):
+        raise ValueError("HEM shrink factors must be finite and in [0, 1).")
+    if not (math.isfinite(HEM_SHRINK_BAND_WIDTH_MM) and HEM_SHRINK_BAND_WIDTH_MM > 0):
+        raise ValueError("HEM shrink band width must be positive and finite.")
+    if not 0 <= HEM_SHRINK_START_OFFSET < HEM_SHRINK_END_OFFSET < SIMULATION_END_OFFSET:
+        raise ValueError("HEM shrink timing must leave a final settling interval.")
+    if obj.vertex_groups.get(HEM_SHRINK_GROUP_NAME) and not owned:
+        raise RuntimeError(f"{obj.name}: reserved shrink group already exists.")
+    if cloth:
+        settings = cloth.settings
+        if settings.vertex_group_shrink not in ("", HEM_SHRINK_GROUP_NAME):
+            raise RuntimeError(f"{obj.name}: another shrink group is already bound.")
+        paths = {settings.path_from_id(p) for p in ("shrink_min", "shrink_max", "vertex_group_shrink")}
+        animation = obj.animation_data
+        if animation:
+            actions = [animation.action] if animation.action else []
+            actions += [strip.action for track in animation.nla_tracks for strip in track.strips if strip.action]
+            curves = []
+            for action in actions:
+                curves.extend(getattr(action, "fcurves", ()))
+                for layer in getattr(action, "layers", ()):
+                    for strip in layer.strips:
+                        for bag in getattr(strip, "channelbags", ()):
+                            curves.extend(bag.fcurves)
+            if any(c.data_path in paths for c in curves):
+                raise RuntimeError(f"{obj.name}: existing shrink keyframes conflict with setup.")
+            expected = obj.get("cloth_hem_shrink_expression", "")
+            for curve in animation.drivers:
+                if curve.data_path in paths and not (
+                    owned and curve.data_path == settings.path_from_id("shrink_max")
+                    and curve.driver.expression == expected
+                ):
+                    raise RuntimeError(f"{obj.name}: existing shrink driver conflicts with setup.")
+        if not owned and (settings.shrink_min != 0 or settings.shrink_max != 0):
+            raise RuntimeError(f"{obj.name}: existing shrink settings conflict with setup.")
+    peak = max(factors)
+    if peak == 0:
+        return {}
+    def members(name):
+        group = obj.vertex_groups.get(name)
+        result = {v.index for v in obj.data.vertices if group and
+                  any(g.group == group.index and g.weight > 0 for g in v.groups)}
+        if not result:
+            raise RuntimeError(f"{obj.name}: missing or empty vertex group {name}.")
+        return result
+    top = members("PANEL_TOP")
+    seeds = [members(HEM_SHRINK_FRONT_GROUP), members(HEM_SHRINK_REAR_GROUP)]
+    if any(not seed <= top for seed in seeds):
+        raise RuntimeError(f"{obj.name}: TOP hems must belong entirely to PANEL_TOP.")
+    adjacency = {i: [] for i in top}
+    # Only edges of faces fully inside TOP; loose seam springs never participate.
+    edges = {tuple(sorted(edge)) for face in obj.data.polygons
+             if set(face.vertices) <= top for edge in face.edge_keys}
+    world = {i: obj.matrix_world @ obj.data.vertices[i].co for i in top}
+    for i, j in edges:
+        length = (world[i] - world[j]).length
+        adjacency[i].append((j, length))
+        adjacency[j].append((i, length))
+    if any(not adjacency[i] for seed in seeds for i in seed):
+        raise RuntimeError(f"{obj.name}: HEM has vertices disconnected from TOP faces.")
+    width = HEM_SHRINK_BAND_WIDTH_MM / 1000.0
+    weights = {}
+    for seed, factor in zip(seeds, factors):
+        for i, distance in hem_band_distances(adjacency, seed, width).items():
+            weight = hem_band_weight(distance, width) * factor / peak
+            if weight > 0:
+                weights[i] = max(weights.get(i, 0.0), weight)
+    return weights
+
+
+def configure_hem_shrink(obj, cloth, weights):
+    """Rebuild only our own group/driver; leave dynamic-rest-mesh mode unchanged."""
+    settings = cloth.settings
+    owned = bool(obj.get("cloth_hem_shrink_owned", False))
+    if owned:
+        settings.driver_remove("shrink_max")
+        settings.vertex_group_shrink = ""
+        settings.shrink_min = settings.shrink_max = 0.0
+        old = obj.vertex_groups.get(HEM_SHRINK_GROUP_NAME)
+        if old:
+            obj.vertex_groups.remove(old)
+        obj["cloth_hem_shrink_owned"] = False
+        obj["cloth_hem_shrink_expression"] = ""
+    if not ENABLE_HEM_SHRINK or not weights:
+        return "OFF"
+    group = obj.vertex_groups.new(name=HEM_SHRINK_GROUP_NAME)
+    for index, weight in weights.items():
+        group.add([index], weight, "REPLACE")
+    settings.vertex_group_shrink = group.name
+    settings.shrink_min = settings.shrink_max = 0.0
+    scene = bpy.context.scene
+    start = scene.frame_start + HEM_SHRINK_START_OFFSET
+    end = scene.frame_start + HEM_SHRINK_END_OFFSET
+    peak = max(HEM_SHRINK_FRONT_FACTOR, HEM_SHRINK_REAR_FACTOR)
+    t = f"max(0.0,min(1.0,(frame-{start})/{end-start}))"
+    expression = f"{peak!r}*({t})*({t})*(3.0-2.0*({t}))"
+    driver = settings.driver_add("shrink_max").driver
+    driver.type = "SCRIPTED"
+    driver.expression = expression
+    obj["cloth_hem_shrink_owned"] = True
+    obj["cloth_hem_shrink_expression"] = expression
+    status = (f"TOP front/rear={HEM_SHRINK_FRONT_FACTOR:g}/{HEM_SHRINK_REAR_FACTOR:g}; "
+              f"ramp={start}->{end}; hold through {scene.frame_start + SIMULATION_END_OFFSET}; "
+              f"band={HEM_SHRINK_BAND_WIDTH_MM:g}mm; vertices={len(weights)}")
+    print(f"[CC HEM SHRINK] {obj.name}: {status}")
+    return status
+
+
+def apply_preset(obj, measured_difference_mm=None, hem_shrink_weights=None):
     """Apply the embedded preset to one mesh object."""
 
     proxy_reason = collision_proxy_reason(obj)
@@ -3025,6 +3179,8 @@ def apply_preset(obj, measured_difference_mm=None):
     # Validate connector topology before creating or changing physics. Raising
     # here leaves a bad mesh untouched and prevents a stronger sewing force
     # from amplifying a many-to-one "black hole" connection.
+    if hem_shrink_weights is None:
+        hem_shrink_weights = prepare_hem_shrink(obj)
     report_sewing_preflight(obj)
 
     modifier = get_or_create_cloth_modifier(obj)
@@ -3171,6 +3327,9 @@ def apply_preset(obj, measured_difference_mm=None):
     )
 
     configure_hem_level_feedback(obj, modifier)
+    obj["cloth_hem_shrink_status"] = configure_hem_shrink(
+        obj, modifier, hem_shrink_weights
+    )
 
     # Replace handlers left by V19 even when every generated field is disabled.
     ensure_force_stage_handler()
@@ -3318,6 +3477,8 @@ def main():
             "如果碰撞代理上已误加 Cloth，请先删除该 Cloth 修改器。"
         )
 
+    hem_shrink_plans = {obj.name: prepare_hem_shrink(obj) for obj in objects}
+
     # Capture every selected object before setup resets the frame/cache of any.
     hem_measurements = {obj.name: measure_settled_hem_difference(obj) for obj in objects}
 
@@ -3349,7 +3510,7 @@ def main():
             expansion_status,
             rear_drag_target,
             rear_drag_status,
-        ) = apply_preset(obj, hem_measurements[obj.name])
+        ) = apply_preset(obj, hem_measurements[obj.name], hem_shrink_plans[obj.name])
         if was_baked:
             baked_objects.append(obj.name)
 

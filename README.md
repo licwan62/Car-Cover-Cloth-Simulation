@@ -171,19 +171,23 @@ config_driven/100_mirror_marks.py
 
 ## 反光条标记（101_reflective_strips.py）
 
-运行后弹出“反光条标记”窗口，在 `PANEL_LEFT`、`PANEL_RIGHT` 或两侧生成矩形反光条
-（默认长 250 mm、宽 50 mm），定位点为反光条中心：
+运行后弹出“反光条标记”窗口，可同时生成**车头反光条**和**车尾反光条**，两条各有开关、
+各自设置参数和颜色（默认橙色），定位点为反光条中心：
 
-| 参数 | 含义 |
+| 参数（每条单独设置） | 含义 |
 | --- | --- |
+| 版片 | `PANEL_LEFT`、`PANEL_RIGHT` 或左右两侧 |
 | 方向 | 横向：长边沿车身前后；竖向：长边竖直 |
-| 前后基准 + 距离 | 中心距该侧版片车头端或车尾端的距离 (mm) |
+| 中心距车头 / 中心距车尾 | 车头反光条量到该侧版片车头端，车尾反光条量到车尾端 (mm) |
 | 中心距 hem | 中心高于该版片 hem 的距离 (mm)；hem 高度取反光条附近 `HEM`/`HEM_*` 顶点落罩后的平均 Z，hem 不水平时随之变化；版片没有 HEM 顶点时取版片最低点 |
+| 长 / 宽 | 默认 250 × 50 mm |
+| 颜色 | 默认橙色 |
 
-反光条使用同一套 CC mark overlay（标记类型 `reflective`），与 `100_marks.py`
-的标记互不覆盖。参数保存在 Cloth 的 `cc_reflective_config`，下次打开窗口自动读回；
-定位记录写入 `cc_reflective_marker_*`。反光条超出版片前后范围、低于 hem 或超出版片顶部时报错。
-运行方式同上：落罩帧、选择 Cloth、运行脚本、确认参数。
+反光条使用同一套 CC mark overlay（标记类型 `reflective_front`、`reflective_rear`），
+与 `100_marks.py` 的标记互不覆盖；第一版的单条 `reflective` 标记会在下次运行时移除。
+参数保存在 Cloth 的 `cc_reflective_config`，下次打开窗口自动读回；定位记录写入
+`cc_reflective_marker_front_*` / `cc_reflective_marker_rear_*`。任一反光条超出版片前后范围、
+低于 hem 或超出版片顶部时报错，该物体保持不变。运行方式同上：落罩帧、选择 Cloth、运行脚本、确认参数。
 
 ## 验证
 

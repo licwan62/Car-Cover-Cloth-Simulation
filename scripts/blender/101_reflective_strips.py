@@ -1,13 +1,20 @@
 """Add reflective-strip marks to the side panels of a settled car cover.
 
-A reflective strip is a rectangle, 250 x 50 mm by default, placed on
-PANEL_LEFT, PANEL_RIGHT or both. It is positioned by its center:
+Two strips can be switched on independently, each with its own settings and
+color (orange by default):
+
+* front: positioned from the front end of the side panel;
+* rear: positioned from the rear end of the side panel.
+
+Each strip is a rectangle, 250 x 50 mm by default, placed on PANEL_LEFT,
+PANEL_RIGHT or both. It is positioned by its center:
 
 * orientation: HORIZONTAL puts the long side along the car, VERTICAL puts it
   upright;
 * height above the hem: measured from the settled HEM vertices of that panel
   next to the strip, so a hem that is not level does not shift the strip;
-* distance from the front or the rear end of the same side panel.
+* distance from the front (front strip) or rear (rear strip) end of the same
+  side panel.
 
 Usage in Blender:
 1. Go to the settled comparison frame.
@@ -17,13 +24,14 @@ Usage in Blender:
    the semantic SVG (002_sew_from_svg.py). A panel without HEM vertices falls
    back to its lowest point.
 4. Run this script, adjust the dialog and press OK. Re-running replaces the
-   strip; switching it off removes it. The dialog opens with the settings last
-   applied to the active cloth (stored in ``cc_reflective_config``).
+   enabled strips and removes the switched-off ones. The dialog opens with the
+   settings last applied to the active cloth (stored in
+   ``cc_reflective_config``).
 
-The strip is drawn by the shared CC mark overlay scheme as mark kind
-``reflective``, so it coexists with the marks of 100_marks.py and the seam
-mark of 003_cloth_setup.py; re-running either script keeps it. Cloth is
-unaffected.
+The strips are drawn by the shared CC mark overlay scheme as mark kinds
+``reflective_front`` and ``reflective_rear``, so they coexist with the marks
+of 100_marks.py and the seam mark of 003_cloth_setup.py; re-running either
+script keeps them. Cloth is unaffected.
 """
 
 import bpy
@@ -34,20 +42,34 @@ from mathutils import Vector
 
 REFLECTIVE_CONFIG = {
     "front_axis": "-Y",
-    "enabled": True,
-    "sides": "BOTH",  # BOTH, PANEL_LEFT or PANEL_RIGHT
-    "orientation": "HORIZONTAL",  # HORIZONTAL: long side along the car; VERTICAL: upright
-    # Strip center: distance from the front/rear end of the side panel, and
+    # Strip center: distance from the front end of the side panel, and
     # height above the local hem.
-    "reference": "FRONT",  # FRONT or REAR
-    "distance_mm": 500.0,
-    "height_from_hem_mm": 300.0,
-    "length_mm": 250.0,
-    "width_mm": 50.0,
-    "color_rgba": [0.85, 0.87, 0.9, 1.0],
+    "front": {
+        "enabled": True,
+        "sides": "BOTH",  # BOTH, PANEL_LEFT or PANEL_RIGHT
+        "orientation": "HORIZONTAL",  # HORIZONTAL: long side along the car; VERTICAL: upright
+        "distance_mm": 500.0,
+        "height_from_hem_mm": 300.0,
+        "length_mm": 250.0,
+        "width_mm": 50.0,
+        "color_rgba": [1.0, 0.25, 0.0, 1.0],  # orange (linear RGB)
+    },
+    # Same fields; the distance is measured from the rear end.
+    "rear": {
+        "enabled": True,
+        "sides": "BOTH",
+        "orientation": "HORIZONTAL",
+        "distance_mm": 500.0,
+        "height_from_hem_mm": 300.0,
+        "length_mm": 250.0,
+        "width_mm": 50.0,
+        "color_rgba": [1.0, 0.25, 0.0, 1.0],
+    },
 }
 
-MARK_KIND = "reflective"
+STRIPS = ("front", "rear")
+MARK_KINDS = {"front": "reflective_front", "rear": "reflective_rear"}
+LEGACY_MARK_KIND = "reflective"  # single strip of the first version
 CONFIG_PROPERTY = "cc_reflective_config"
 RECORD_PREFIX = "cc_reflective_marker"
 # 100_marks.py settings; their front_axis seeds the dialog on a first run.
@@ -520,15 +542,15 @@ def _front_axis(config):
     return axis, 0 if axis.endswith("X") else 1
 
 
-def _choice(config, key, allowed):
-    value = str(config[key]).upper()
+def _choice(strip, key, allowed):
+    value = str(strip[key]).upper()
     if value not in allowed:
         raise ValueError(f"{key} 必须为 {' 或 '.join(allowed)}。")
     return value
 
 
-def _panel_names(config):
-    sides = _choice(config, "sides", ("BOTH", *SIDE_PANELS))
+def _panel_names(strip):
+    sides = _choice(strip, "sides", ("BOTH", *SIDE_PANELS))
     return SIDE_PANELS if sides == "BOTH" else (sides,)
 
 
@@ -592,55 +614,65 @@ def _hem_height(panel, world, longitudinal, center, half_along):
     return sum(world[index].z for index in local) / len(local), "hem"
 
 
-def _strip_extents(config):
+def _strip_extents(strip):
     """Half extents (along the car, upright) in metres."""
-    length = float(config["length_mm"])
-    width = float(config["width_mm"])
+    length = float(strip["length_mm"])
+    width = float(strip["width_mm"])
     if length <= 0 or width <= 0:
         raise ValueError("反光条长度和宽度必须大于零。")
-    if _choice(config, "orientation", ("HORIZONTAL", "VERTICAL")) == "VERTICAL":
+    if _choice(strip, "orientation", ("HORIZONTAL", "VERTICAL")) == "VERTICAL":
         length, width = width, length
     return length / 2000.0, width / 2000.0
 
 
-def _strip_target(name, panel, world, config, half_along, half_up):
-    """Strip center on one side panel, with the hem height it is measured from."""
-    axis, longitudinal = _front_axis(config)
-    reference = _choice(config, "reference", ("FRONT", "REAR"))
+def _strip_target(name, panel, world, axis, end, strip, half_along, half_up):
+    """Strip center on one side panel, with the hem height it is measured from.
+
+    ``end`` is "front" or "rear": the panel end the distance is measured from.
+    """
+    longitudinal = 0 if axis.endswith("X") else 1
     for key in ("distance_mm", "height_from_hem_mm"):
-        if float(config[key]) < 0:
+        if float(strip[key]) < 0:
             raise ValueError(f"{key} 不能小于零。")
     low, high = panel["bounds"]
-    use_high = axis.startswith("+") == (reference == "FRONT")
-    distance = float(config["distance_mm"]) / 1000.0
+    use_high = axis.startswith("+") == (end == "front")
+    distance = float(strip["distance_mm"]) / 1000.0
     center = high[longitudinal] - distance if use_high else low[longitudinal] + distance
+    end_label = "车头" if end == "front" else "车尾"
     if center - half_along < low[longitudinal] or center + half_along > high[longitudinal]:
         raise ValueError(
-            f"反光条超出 {name} 前后范围（版片长 "
+            f"{end_label}反光条超出 {name} 前后范围（版片长 "
             f"{(high[longitudinal] - low[longitudinal]) * 1000.0:.0f} mm）；"
-            "请调整距车头/车尾距离或车头方向。"
+            f"请调整距{end_label}距离或车头方向。"
         )
     hem_z, source = _hem_height(panel, world, longitudinal, center, half_along)
     target = (low + high) * 0.5
     target[longitudinal] = center
-    target.z = hem_z + float(config["height_from_hem_mm"]) / 1000.0
+    target.z = hem_z + float(strip["height_from_hem_mm"]) / 1000.0
     if target.z - half_up < hem_z:
-        raise ValueError(f"反光条下边低于 {name} 的 hem；请增大距 hem 距离。")
+        raise ValueError(f"{end_label}反光条下边低于 {name} 的 hem；请增大距 hem 距离。")
     if target.z + half_up > high.z:
-        raise ValueError(f"反光条上边超出 {name} 顶部；请减小距 hem 距离。")
+        raise ValueError(f"{end_label}反光条上边超出 {name} 顶部；请减小距 hem 距离。")
     return target, hem_z, source
 
 
-def _strip_mark(cloth, world, config):
-    """Corner coordinates of the strip on every selected side panel."""
-    _, longitudinal = _front_axis(config)
-    half_along, half_up = _strip_extents(config)
+def _strip_mark(cloth, world, panels, axis, end, strip):
+    """Corner coordinates of one strip on every selected side panel.
+
+    ``panels`` caches _side_panel() results shared by both strips.
+    """
+    longitudinal = 0 if axis.endswith("X") else 1
+    half_along, half_up = _strip_extents(strip)
     mesh = cloth.data
     values = [MARK_OUTSIDE] * (len(mesh.loops) * 2)
     faces, placements = set(), {}
-    for name in _panel_names(config):
-        panel = _side_panel(cloth, world, name)
-        target, hem_z, source = _strip_target(name, panel, world, config, half_along, half_up)
+    for name in _panel_names(strip):
+        if name not in panels:
+            panels[name] = _side_panel(cloth, world, name)
+        panel = panels[name]
+        target, hem_z, source = _strip_target(
+            name, panel, world, axis, end, strip, half_along, half_up
+        )
         selected = 0
         for index in panel["polygons"]:
             polygon = mesh.polygons[index]
@@ -653,8 +685,8 @@ def _strip_mark(cloth, world, config):
                 selected += 1
         if not selected:
             raise RuntimeError(
-                f"反光条在 {name} 范围内没有布料面；请确认当前帧已经完成落罩，"
-                "并检查车头方向、位置及尺寸。"
+                f"{'车头' if end == 'front' else '车尾'}反光条在 {name} 范围内没有布料面；"
+                "请确认当前帧已经完成落罩，并检查车头方向、位置及尺寸。"
             )
         placements[name] = {"hem_z": hem_z, "hem_source": source, "faces": selected}
     return {"values": values, "faces": faces, "placements": placements}
@@ -664,8 +696,13 @@ def _strip_mark(cloth, world, config):
 
 
 def _merged_config(config):
+    """REFLECTIVE_CONFIG overlaid with a (possibly partial) config."""
     result = copy.deepcopy(REFLECTIVE_CONFIG)
-    result.update(copy.deepcopy(config or {}))
+    for key, value in (config or {}).items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key].update(copy.deepcopy(value))
+        elif key in result:
+            result[key] = copy.deepcopy(value)
     return result
 
 
@@ -677,62 +714,77 @@ def _stored_config(cloth, name=CONFIG_PROPERTY):
     return stored if isinstance(stored, dict) else {}
 
 
-def strip_info_text(config):
-    """One-line positioning record (ASCII, also shown in the dialog)."""
+def strip_info_text(config, end):
+    """One-line positioning record of one strip (ASCII, shown in the dialog)."""
+    strip = config[end]
+    if not strip.get("enabled", True):
+        return f"REFLECTIVE {end.upper()} OFF"
     return (
-        f"REFLECTIVE {str(config['sides']).upper()}  {str(config['orientation']).upper()}  "
-        f"{str(config['reference']).upper()} {float(config['distance_mm']):g}  "
-        f"HEM {float(config['height_from_hem_mm']):g}  "
-        f"L {float(config['length_mm']):g} x W {float(config['width_mm']):g} mm  "
-        f"FRONT AXIS {config['front_axis']}"
+        f"REFLECTIVE {end.upper()} {float(strip['distance_mm']):g}  "
+        f"HEM {float(strip['height_from_hem_mm']):g}  "
+        f"{str(strip['sides']).upper()}  {str(strip['orientation']).upper()}  "
+        f"L {float(strip['length_mm']):g} x W {float(strip['width_mm']):g} mm"
     )
 
 
-def _write_records(cloth, config, result):
-    cloth[RECORD_PREFIX + "_faces"] = ",".join(str(index) for index in sorted(result["faces"]))
-    cloth[RECORD_PREFIX + "_panels"] = ",".join(result["placements"])
-    cloth[RECORD_PREFIX + "_hem_z_mm"] = [
+def _write_records(cloth, config, end, result):
+    prefix = f"{RECORD_PREFIX}_{end}"
+    cloth[prefix + "_faces"] = ",".join(str(index) for index in sorted(result["faces"]))
+    cloth[prefix + "_panels"] = ",".join(result["placements"])
+    cloth[prefix + "_hem_z_mm"] = [
         placement["hem_z"] * 1000.0 for placement in result["placements"].values()
     ]
-    cloth[RECORD_PREFIX + "_hem_source"] = ",".join(
+    cloth[prefix + "_hem_source"] = ",".join(
         placement["hem_source"] for placement in result["placements"].values()
     )
-    cloth[RECORD_PREFIX + "_info"] = strip_info_text(config)
+    cloth[prefix + "_info"] = strip_info_text(config, end)
 
 
 def apply_reflective_strips(cloth, config=None):
-    """Write the strip (or remove it when disabled). Returns the face count."""
+    """Write the enabled strips, remove the disabled ones.
+
+    Every strip is computed before anything is written, so an error leaves the
+    cloth unchanged. Returns {"front"/"rear": face count} of written strips.
+    """
     config = _merged_config(config)
-    _front_axis(config)
-    result = None
-    if config.get("enabled", True):
-        result = _strip_mark(cloth, mark_evaluated_vertices(cloth), config)
-        mark_write(cloth, MARK_KIND, result["values"], config["color_rgba"])
-    else:
-        mark_remove(cloth, MARK_KIND)
+    axis, _ = _front_axis(config)
+    enabled = [end for end in STRIPS if config[end].get("enabled", True)]
+    world = mark_evaluated_vertices(cloth) if enabled else None
+    panels = {}
+    results = {
+        end: _strip_mark(cloth, world, panels, axis, end, config[end]) for end in enabled
+    }
+
+    mark_remove(cloth, LEGACY_MARK_KIND)
+    for end in STRIPS:
+        if end in results:
+            mark_write(cloth, MARK_KINDS[end], results[end]["values"],
+                       config[end]["color_rgba"])
+        else:
+            mark_remove(cloth, MARK_KINDS[end])
     mark_rebuild(cloth)
 
     for key in [key for key in cloth.keys() if key.startswith(RECORD_PREFIX)]:
         del cloth[key]
-    if result is not None:
-        _write_records(cloth, config, result)
+    for end, result in results.items():
+        _write_records(cloth, config, end, result)
     cloth[CONFIG_PROPERTY] = json.dumps(config, ensure_ascii=False)
 
-    count = len(result["faces"]) if result else 0
-    print(f"CC reflective strips: cloth={cloth.name}, faces={count}"
-          + ("" if result else ", removed"))
-    if result:
-        print("  " + strip_info_text(config))
+    counts = {end: len(result["faces"]) for end, result in results.items()}
+    removed = [end for end in STRIPS if end not in results]
+    print(f"CC reflective strips: cloth={cloth.name}, faces={counts}, removed={removed}")
+    for end, result in results.items():
+        print("  " + strip_info_text(config, end))
         for name, placement in result["placements"].items():
-            print(f"  {name}: hem Z {placement['hem_z'] * 1000.0:.1f} mm "
+            print(f"    {name}: hem Z {placement['hem_z'] * 1000.0:.1f} mm "
                   f"({placement['hem_source']}), faces {placement['faces']}")
-    return count
+    return counts
 
 
 def apply_to_cloths(cloths, config=None):
     """apply_reflective_strips() on each cloth; a failure skips only that cloth.
 
-    Returns ({cloth name: face count}, {cloth name: error message}).
+    Returns ({cloth name: {strip: face count}}, {cloth name: error message}).
     """
     done, failed = {}, {}
     for cloth in cloths:
@@ -754,56 +806,73 @@ ENUM_ITEMS = {
               ("PANEL_RIGHT", "PANEL_RIGHT", "仅右侧版片")),
     "orientation": (("HORIZONTAL", "横向", "长边沿车身前后方向"),
                     ("VERTICAL", "竖向", "长边竖直")),
-    "reference": (("FRONT", "车头", "中心距版片车头端"),
-                  ("REAR", "车尾", "中心距版片车尾端")),
 }
-# (config key, label)
-SETTINGS_FIELDS = (
-    ("front_axis", "车头方向"),
-    ("enabled", "反光条"),
+STRIP_LABELS = {"front": "车头", "rear": "车尾"}
+# (strip key, label); the strip's own label is filled in per strip.
+STRIP_FIELDS = (
+    ("enabled", "{end}反光条"),
     ("sides", "版片"),
     ("orientation", "方向"),
-    ("reference", "前后基准"),
-    ("distance_mm", "中心距车头/车尾 (mm)"),
+    ("distance_mm", "中心距{end} (mm)"),
     ("height_from_hem_mm", "中心距 hem (mm)"),
     ("length_mm", "长 (mm)"),
     ("width_mm", "宽 (mm)"),
+    ("color_rgba", "颜色"),
+)
+# (WindowManager property suffix, config section or None, key, label)
+SETTINGS_FIELDS = (("front_axis", None, "front_axis", "车头方向"),) + tuple(
+    (f"{end}_{key}", end, key, label.format(end=STRIP_LABELS[end]))
+    for end in STRIPS for key, label in STRIP_FIELDS
 )
 SETTINGS_PREFIX = "cc_reflective_"
 
 
+def _config_value(config, section, key):
+    return config[key] if section is None else config[section][key]
+
+
 def _register_settings():
     wm = bpy.types.WindowManager
-    for key, label in SETTINGS_FIELDS:
-        default = REFLECTIVE_CONFIG[key]
+    for suffix, section, key, label in SETTINGS_FIELDS:
+        default = _config_value(REFLECTIVE_CONFIG, section, key)
         if key in ENUM_ITEMS:
             prop = bpy.props.EnumProperty(name=label, items=ENUM_ITEMS[key], default=default)
+        elif key == "color_rgba":
+            prop = bpy.props.FloatVectorProperty(
+                name=label, subtype="COLOR", size=4, min=0.0, max=1.0, default=default
+            )
         elif isinstance(default, bool):
             prop = bpy.props.BoolProperty(name=label, default=default)
         else:
             minimum = 1.0 if key in {"length_mm", "width_mm"} else 0.0
             prop = bpy.props.FloatProperty(name=label, min=minimum, default=default)
-        setattr(wm, SETTINGS_PREFIX + key, prop)
+        setattr(wm, SETTINGS_PREFIX + suffix, prop)
 
 
 def _settings_to_config(wm):
     config = copy.deepcopy(REFLECTIVE_CONFIG)
-    for key, _ in SETTINGS_FIELDS:
-        config[key] = getattr(wm, SETTINGS_PREFIX + key)
+    for suffix, section, key, _ in SETTINGS_FIELDS:
+        value = getattr(wm, SETTINGS_PREFIX + suffix)
+        if key == "color_rgba":
+            value = [float(channel) for channel in value]
+        if section is None:
+            config[key] = value
+        else:
+            config[section][key] = value
     return config
 
 
 def _config_to_settings(wm, config):
     config = _merged_config(config)
-    for key, _ in SETTINGS_FIELDS:
+    for suffix, section, key, _ in SETTINGS_FIELDS:
         try:
-            setattr(wm, SETTINGS_PREFIX + key, config[key])
+            setattr(wm, SETTINGS_PREFIX + suffix, _config_value(config, section, key))
         except (TypeError, ValueError):
             pass  # keep the dialog value when a stored value no longer fits
 
 
 class CC_OT_reflective_strips(bpy.types.Operator):
-    """在落罩后的车罩左右侧版片上生成反光条标记"""
+    """在落罩后的车罩左右侧版片上生成车头、车尾反光条标记"""
 
     bl_idname = "cc.reflective_strips"
     bl_label = "反光条标记"
@@ -813,8 +882,8 @@ class CC_OT_reflective_strips(bpy.types.Operator):
         wm = context.window_manager
         layout = self.layout
 
-        def prop(container, key):
-            container.prop(wm, SETTINGS_PREFIX + key)
+        def prop(container, suffix, **options):
+            container.prop(wm, SETTINGS_PREFIX + suffix, **options)
 
         try:
             names = [obj.name for obj in target_cloths(context)]
@@ -824,22 +893,23 @@ class CC_OT_reflective_strips(bpy.types.Operator):
             shown = "、".join(names[:4]) + (" 等" if len(names) > 4 else "")
             layout.label(text=f"将标记 {len(names)} 个物体：{shown}", icon="OBJECT_DATA")
         prop(layout, "front_axis")
+        layout.label(text="定位点为反光条中心；距离沿车身量到所选版片的车头/车尾端")
+        config = _settings_to_config(wm)
 
-        box = layout.box()
-        prop(box, "enabled")
-        column = box.column()
-        column.active = wm.cc_reflective_enabled
-        column.label(text="定位点为反光条中心；距离沿车身量到所选版片的前/后端")
-        prop(column, "sides")
-        column.row().prop(wm, SETTINGS_PREFIX + "orientation", expand=True)
-        row = column.row(align=True)
-        prop(row, "reference")
-        prop(row, "distance_mm")
-        prop(column, "height_from_hem_mm")
-        row = column.row(align=True)
-        prop(row, "length_mm")
-        prop(row, "width_mm")
-        column.label(text=strip_info_text(_settings_to_config(wm)), icon="INFO")
+        for end in STRIPS:
+            box = layout.box()
+            prop(box, f"{end}_enabled")
+            column = box.column()
+            column.active = getattr(wm, f"{SETTINGS_PREFIX}{end}_enabled")
+            prop(column, f"{end}_sides")
+            prop(column.row(), f"{end}_orientation", expand=True)
+            prop(column, f"{end}_distance_mm")
+            prop(column, f"{end}_height_from_hem_mm")
+            row = column.row(align=True)
+            prop(row, f"{end}_length_mm")
+            prop(row, f"{end}_width_mm")
+            prop(column, f"{end}_color_rgba")
+            column.label(text=strip_info_text(config, end), icon="INFO")
 
     def execute(self, context):
         try:
@@ -854,9 +924,10 @@ class CC_OT_reflective_strips(bpy.types.Operator):
             self.report({"ERROR"}, f"{len(failed)} 个物体全部标记失败，详见警告。")
             return {"CANCELLED"}
         mark_show_solid_texture(context)
+        faces = sum(sum(counts.values()) for counts in done.values())
         self.report(
             {"WARNING" if failed else "INFO"},
-            f"已标记 {len(done)} 个物体，反光条共 {sum(done.values())} 面"
+            f"已标记 {len(done)} 个物体，反光条共 {faces} 面"
             + (f"，{len(failed)} 个失败" if failed else ""),
         )
         return {"FINISHED"}

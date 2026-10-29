@@ -26,10 +26,10 @@ loads one by path when a config-driven wrapper needs its implementation.
 | `002_sew_from_svg.py` | Build Sewing directly from a semantic SVG | Creates PANEL/SEAM/HEM and automatic A/B vertex groups, then arc-length-matched loose edges |
 | `003_cloth_setup.py` | Apply the self-contained cloth preset | Animated soft pin springs, object/self collision, and seam material |
 | `100_marks.py` | Mirror-pocket (half ellipse + position label), charge-port, door-line and plate-opening marks | One `MARKS_CONFIG` dialog; each mark can be switched off |
-| `101_reflective_strips.py` | Reflective-strip rectangle on PANEL_LEFT / PANEL_RIGHT | One `REFLECTIVE_CONFIG` dialog; height measured from the local HEM |
+| `101_reflective_strips.py` | Front and rear reflective-strip rectangles on PANEL_LEFT / PANEL_RIGHT | One `REFLECTIVE_CONFIG` dialog; each strip has its own settings and color; height measured from the local HEM |
 | `200_collision_exterior.py` | Exterior-only drape collider | Six-direction first-hit envelope, gap closing, cavity/island removal, closed-manifold validation |
 | `300_export_three_views.py` | Real-size three-view SVG/PNG export | Auxiliary reporting tool |
-| `301_export_six_views.py` | Four orthographic and two perspective views | Six PNGs and an embedded SVG atlas |
+| `301_export_six_views.py` | Four orthographic and four perspective views | Eight PNGs and an embedded SVG atlas |
 | `config_driven/000_repair_boundary.py` | Endpoint weld, small-gap bridge, boundary validation | Reads `boundary_repair` |
 | `config_driven/001_remesh.py` | Same meshing stage as `001_remesh.py` | Reads `cloth_mesh` |
 | `config_driven/002_sew_from_groups.py` | Create Sewing Springs from existing seam vertex groups | Semantic ID pairing, A/B direction, legacy pairs from `sewing` |
@@ -164,18 +164,23 @@ scene's default -Y, change `mirror_markers.front_axis` in
 
 ## 101: Reflective strips
 
-`101_reflective_strips.py` draws a 250 x 50 mm reflective-strip rectangle (by
-default) on `PANEL_LEFT`, `PANEL_RIGHT` or both, on every selected Cloth mesh.
-The dialog sets the orientation (HORIZONTAL: long side along the car;
-VERTICAL: upright), the strip center's distance from the front or rear end of
-that side panel, and the center's height above the hem. The hem height is the
-mean settled Z of that panel's `HEM` / `HEM_*` vertices next to the strip, so
-a sloping hem moves the strip with it; a panel without HEM vertices uses its
-lowest point. The strip is the overlay mark kind `reflective`, so it survives
-reruns of `100_marks.py` and `003_cloth_setup.py` (and the reverse). Settings
+`101_reflective_strips.py` draws up to two reflective-strip rectangles on every
+selected Cloth mesh: a front strip positioned from the front end of the side
+panel and a rear strip positioned from the rear end. Each can be switched on
+or off and has its own settings: `PANEL_LEFT`, `PANEL_RIGHT` or both;
+orientation (HORIZONTAL: long side along the car; VERTICAL: upright); the
+center's distance from its panel end; the center's height above the hem;
+length and width (250 x 50 mm by default); and color (orange by default). The
+hem height is the mean settled Z of that panel's `HEM` / `HEM_*` vertices next
+to the strip, so a sloping hem moves the strip with it; a panel without HEM
+vertices uses its lowest point. The strips are the overlay mark kinds
+`reflective_front` and `reflective_rear`, so they survive reruns of
+`100_marks.py` and `003_cloth_setup.py` (and the reverse); the single
+`reflective` mark of the first version is removed on the next run. Settings
 are stored in `cc_reflective_config`, positioning records in
-`cc_reflective_marker_*`. A strip that leaves the panel's length, drops below
-the hem or reaches the panel top is rejected.
+`cc_reflective_marker_front_*` / `cc_reflective_marker_rear_*`. A strip that
+leaves the panel's length, drops below the hem or reaches the panel top is
+rejected, and the cloth is left unchanged.
 
 ## 200: Exterior-only collision envelope
 
@@ -208,19 +213,75 @@ smoothing can shift dimensions by roughly the sampling scale; source bounds
 are not forcibly restored. Inspect the result before baking, and use original
 geometry for fit measurements.
 
-## 301: Six-view atlas
+## 301: Eight-view atlas
 
-Activate the vehicle Mesh at the desired frame and run
+In Object Mode, activate the cloth Mesh to highlight at the desired frame and run
 `301_export_six_views.py` in Blender's Text Editor. The script
-exports LEFT, FRONT, TOP, REAR, LEFT_FRONT and LEFT_REAR PNGs plus a three-row,
-two-column SVG atlas into `SIX_VIEWS/<object name>/` beside the saved blend file
+exports LEFT, FRONT, TOP, REAR, LEFT_FRONT, LEFT_REAR, RIGHT_FRONT and RIGHT_REAR
+PNGs plus a four-row, two-column SVG atlas named `<object>_EIGHT_VIEWS.svg`
+into `EIGHT_VIEWS/<object name>/` beside the saved blend file
 (Desktop for an unsaved file). Reruns overwrite the matching export files.
-Only the active Mesh is rendered, including its evaluated modifiers.
+The active Mesh (including evaluated modifiers) defines the dimensions and
+framing. Export uses the largest ordinary 3D Viewport in the same window, or
+the current viewport when run from one. Keep that viewport open beside the
+Text Editor; leave editor maximization and Quad View before running. Blender's
+GUI and a working GPU context are required; `--background` is not supported.
+
+All objects visible in that viewport's view layer/local view are exported,
+including separate Text labels and markers, even if disabled for final
+renders. Hide unrelated objects in the viewport before running. The active
+Mesh must be visible there. Orthographic framing includes `ORTHO_MARGIN_MM`
+(100 mm per edge by default) without changing the millimetre scale, so the
+outline is not clipped at the image boundary. Framing remains based on the
+active Mesh; increase the margin or reposition labels extending beyond it.
+
+LEFT and TOP shading follows the reference preset: Solid, Studio lighting,
+Texture color, theme background, green object outlines, specular highlights,
+X-Ray enabled at 0.600, backface culling and shadows disabled. The viewport's
+specific studio light and lighting parameters are retained. Cavity is set to
+Screen but Blender disables this effect while X-Ray is active. PNG backgrounds
+are opaque to preserve X-Ray's appearance against the theme background.
+`VIEWPORT_XRAY_ALPHA` and `VIEWPORT_OUTLINE_COLOR` configure the preset.
+FRONT, REAR and all four perspective images use Wireframe shading: only the active
+cloth Mesh is selected, so its edges use the Blender theme's active selection
+color (orange in the default theme). Other visible meshes remain unselected
+wireframes. The wireframe preset matches the reference: theme wire colors,
+theme background, object outlines disabled, and wireframe X-Ray disabled.
+Unselected mesh wires retain the original theme color, while the cloth
+retains its theme selection highlight. Theme wire colors are not modified.
+The LEFT/TOP solid X-Ray remains 0.600; perspective camera angles are retained.
+Selection overlays are enabled for these six images, while grids,
+axes, cursor, text information, object extras and relationship lines are
+hidden. Original selection and active object are restored after success or
+failure. Only LEFT and TOP retain the textured X-Ray appearance and green
+outlines. LEFT_FRONT and LEFT_REAR look down from +20 degrees; the final row's
+RIGHT_FRONT and RIGHT_REAR look up from -20 degrees on the opposite side,
+showing the underside. `PERSPECTIVE_ELEVATION_DEG` sets the angle magnitude.
+`KEEP_VIEWPORT_OVERLAYS = False` suppresses LEFT/TOP grid, selection highlights and
+other overlays, while real Mesh/Text markers remain visible; enable it to
+retain the viewport's overlays instead.
 
 The four orthographic images retain millimetre dimensions in the SVG;
 perspective images are visual references without a measurement scale. The
 canvas grows as needed. Z is height and the longer world X/Y extent is length.
 Adjust `LEFT_SIGN` and `FRONT_SIGN` for the model orientation; the perspective
 views follow these same settings. Sampling density, perspective focal length
-and elevation are configurable at the top of the script. Render settings and
-object render visibility are restored after export, including render failures.
+and elevation are configurable at the top of the script. Sampling defaults
+to 0.5 px/mm (four times the previous width and height, sixteen times the pixel
+count); a 5000 mm wide image is 2500 px wide. `VIEWPORT_AA = '32'` requests
+32-sample anti-aliasing for viewport and viewport-render paths. These quality
+settings apply to all eight PNGs and the PNGs embedded in the SVG; the SVG's
+physical dimensions and measurement scale remain unchanged. Higher quality
+increases export time and memory use. Viewport shading,
+camera, view orientation, overlays and render settings are restored after
+export, including render failures. Anti-aliasing preferences are temporarily
+changed in memory and restored without saving user preferences. Object
+visibility is left untouched.
+
+The disposable GUI integration check is
+`blender --factory-startup --python tests/blender/check_six_views.py`.
+It creates a synthetic scene, exports eight PNGs and the SVG atlas, verifies
+viewport-only objects and state restoration on success/failure, then quits
+its Blender instance. Run this command in a separate instance, not from a
+working scene. Its console prints the temporary output folder and PASS or
+the failure traceback. With `--background` it checks only the context guard.

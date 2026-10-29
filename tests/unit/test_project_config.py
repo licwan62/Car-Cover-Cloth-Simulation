@@ -59,7 +59,7 @@ class ProjectConfigTests(unittest.TestCase):
             if isinstance(node, ast.Import)
             for alias in node.names
         }
-        self.assertEqual(imported_modules, {"bpy", "re"})
+        self.assertEqual(imported_modules, {"bpy", "re", "heapq", "math"})
         self.assertNotIn("project_config", source)
         self.assertNotIn(".keyframe_insert(", source)
         self.assertIn("bpy.app.handlers.frame_change_pre", source)
@@ -88,11 +88,12 @@ class ProjectConfigTests(unittest.TestCase):
                 except (ValueError, TypeError):
                     pass
 
-        self.assertEqual(constants["PRESET_NAME"], "CarCover_Simplified_15F_V31")
+        self.assertEqual(constants["PRESET_NAME"], "CarCover_Simplified_15F_V32")
         self.assertEqual(constants["SIMULATION_END_OFFSET"], 14)
         self.assertTrue(constants["ENABLE_ROOF_PIN_DURING_SIMULATION"])
         self.assertFalse(constants["ENABLE_HEM_LEVEL_FEEDBACK"])
         self.assertFalse(constants["ENABLE_HEM_DRAG"])
+        self.assertTrue(constants["ENABLE_HEM_SHRINK"])
         self.assertTrue(constants["ENABLE_POST_CLOTH_SEAM_WELD"])
         self.assertTrue(constants["ENABLE_SELF_COLLISION"])
         self.assertTrue(constants["ENABLE_OBJECT_COLLISION"])
